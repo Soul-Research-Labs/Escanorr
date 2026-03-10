@@ -1,0 +1,28 @@
+[package]
+name = "escanorr-contracts"
+description = "Privacy pool state machine, WAL, snapshots, epoch/nullifier management, compliance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+escanorr-primitives.workspace = true
+escanorr-note.workspace = true
+escanorr-tree.workspace = true
+escanorr-verifier.workspace = true
+pasta_curves.workspace = true
+ff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+hex.workspace = true
+rand.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+bincode.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile = "3"

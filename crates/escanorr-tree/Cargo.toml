@@ -1,0 +1,23 @@
+[package]
+name = "escanorr-tree"
+description = "Append-only incremental Merkle tree (depth 32, Poseidon hash)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+escanorr-primitives.workspace = true
+pasta_curves.workspace = true
+ff.workspace = true
+serde.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "tree_bench"
+harness = false

@@ -1,0 +1,32 @@
+[package]
+name = "escanorr-rpc"
+description = "Axum HTTP server, relay jitter, proof envelope unwrap, epoch-roots, bridge endpoints"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+escanorr-primitives.workspace = true
+escanorr-node.workspace = true
+escanorr-contracts.workspace = true
+escanorr-bridge.workspace = true
+escanorr-sdk.workspace = true
+pasta_curves.workspace = true
+ff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+prometheus.workspace = true
+thiserror.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

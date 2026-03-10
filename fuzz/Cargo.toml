@@ -1,0 +1,46 @@
+[package]
+name = "escanorr-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+escanorr-primitives = { path = "../crates/escanorr-primitives" }
+escanorr-note = { path = "../crates/escanorr-note" }
+escanorr-tree = { path = "../crates/escanorr-tree" }
+escanorr-bridge = { path = "../crates/escanorr-bridge" }
+pasta_curves = { version = "0.5", features = ["alloc"] }
+ff = "0.13"
+
+# Prevent this from interfering with workspace
+[workspace]
+
+[[bin]]
+name = "fuzz_envelope"
+path = "fuzz_targets/envelope.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_poseidon"
+path = "fuzz_targets/poseidon.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_merkle"
+path = "fuzz_targets/merkle.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_encryption"
+path = "fuzz_targets/encryption.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_nullifier"
+path = "fuzz_targets/nullifier.rs"
+doc = false

@@ -1,0 +1,27 @@
+[package]
+name = "escanorr-cli"
+description = "Interactive CLI (escanorr run) — REPL binary for the Escanorr privacy coprocessor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "escanorr"
+path = "src/main.rs"
+
+[dependencies]
+escanorr-sdk.workspace = true
+escanorr-primitives.workspace = true
+escanorr-client.workspace = true
+escanorr-node.workspace = true
+escanorr-rpc.workspace = true
+pasta_curves.workspace = true
+ff.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+tokio.workspace = true

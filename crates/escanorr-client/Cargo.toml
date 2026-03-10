@@ -1,0 +1,25 @@
+[package]
+name = "escanorr-client"
+description = "Client wallet: key management, note tracking, coin selection, encrypted backup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+escanorr-primitives.workspace = true
+escanorr-note.workspace = true
+escanorr-tree.workspace = true
+pasta_curves.workspace = true
+ff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+aes-gcm.workspace = true
+argon2.workspace = true
+rand.workspace = true
+bip39.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

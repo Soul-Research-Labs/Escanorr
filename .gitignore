@@ -1,0 +1,43 @@
+# Rust
+/target
+Cargo.lock.bak
+
+# Foundry / Solidity
+/contracts/out
+/contracts/cache
+/contracts/broadcast
+
+# TypeScript SDK
+/sdks/typescript/node_modules
+/sdks/typescript/dist
+/sdks/typescript/.tsbuildinfo
+
+# Fuzz
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts
+
+# Benchmarks
+/target/criterion
+
+# Editor / OS
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Secrets / keys
+.env
+.env.*
+*.key
+*.pem
+*.secret
+
+# Runtime artifacts
+wallet.json
+snapshot_*.bin
+wal.log

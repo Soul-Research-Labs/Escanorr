@@ -1,0 +1,110 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/escanorr-primitives",
+    "crates/escanorr-note",
+    "crates/escanorr-tree",
+    "crates/escanorr-circuits",
+    "crates/escanorr-prover",
+    "crates/escanorr-verifier",
+    "crates/escanorr-contracts",
+    "crates/escanorr-node",
+    "crates/escanorr-client",
+    "crates/escanorr-bridge",
+    "crates/escanorr-sdk",
+    "crates/escanorr-rpc",
+    "crates/escanorr-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Soul-Research-Labs/escanorr"
+authors = ["Soul Research Labs"]
+
+[workspace.dependencies]
+# Zcash ecosystem
+halo2_proofs = { git = "https://github.com/zcash/halo2.git", tag = "halo2_proofs-0.3.0" }
+halo2_gadgets = { git = "https://github.com/zcash/halo2.git", tag = "halo2_gadgets-0.3.0" }
+pasta_curves = { version = "0.5", features = ["alloc"] }
+ff = "0.13"
+group = "0.13"
+incrementalmerkletree = "0.7"
+
+# Cryptography
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+hmac = "0.12"
+argon2 = "0.5"
+aes-gcm = "0.10"
+subtle = "2.5"
+rand = "0.8"
+rand_core = "0.6"
+
+# BIP39
+bip39 = "2.0"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+bincode = "1"
+base64 = "0.22"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# HTTP
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Testing
+proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Internal crates (workspace members)
+escanorr-primitives = { path = "crates/escanorr-primitives" }
+escanorr-note = { path = "crates/escanorr-note" }
+escanorr-tree = { path = "crates/escanorr-tree" }
+escanorr-circuits = { path = "crates/escanorr-circuits" }
+escanorr-prover = { path = "crates/escanorr-prover" }
+escanorr-verifier = { path = "crates/escanorr-verifier" }
+escanorr-contracts = { path = "crates/escanorr-contracts" }
+escanorr-node = { path = "crates/escanorr-node" }
+escanorr-client = { path = "crates/escanorr-client" }
+escanorr-bridge = { path = "crates/escanorr-bridge" }
+escanorr-sdk = { path = "crates/escanorr-sdk" }
+escanorr-rpc = { path = "crates/escanorr-rpc" }
+escanorr-cli = { path = "crates/escanorr-cli" }
+
+# Metrics
+prometheus = "0.13"
+
+# Async traits
+async-trait = "0.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.bench]
+lto = true
+codegen-units = 1

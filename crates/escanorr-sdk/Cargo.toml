@@ -1,0 +1,31 @@
+[package]
+name = "escanorr-sdk"
+description = "High-level Escanorr orchestrator: deposit, send, withdraw, bridge operations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+escanorr-primitives.workspace = true
+escanorr-note.workspace = true
+escanorr-tree.workspace = true
+escanorr-circuits.workspace = true
+escanorr-prover.workspace = true
+escanorr-verifier.workspace = true
+escanorr-contracts.workspace = true
+escanorr-node.workspace = true
+escanorr-client.workspace = true
+escanorr-bridge.workspace = true
+pasta_curves.workspace = true
+ff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rand.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+
+[[example]]
+name = "e2e"
+path = "examples/e2e.rs"

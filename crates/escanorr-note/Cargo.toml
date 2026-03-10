@@ -1,0 +1,33 @@
+[package]
+name = "escanorr-note"
+description = "Note model, spending/viewing keys, nullifiers, stealth addresses, ChaCha20-Poly1305 encryption"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+escanorr-primitives.workspace = true
+pasta_curves.workspace = true
+ff.workspace = true
+group.workspace = true
+chacha20poly1305.workspace = true
+hkdf.workspace = true
+sha2.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+bip39.workspace = true
+pbkdf2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "note_bench"
+harness = false

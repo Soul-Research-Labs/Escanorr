@@ -1,0 +1,284 @@
+# Escanorr
+
+**Zcash-native privacy coprocessor & cross-chain bridge**
+
+Escanorr extends Zcash's Orchard-level privacy across chains. It combines a Halo2-based privacy coprocessor with a cross-chain bridge that wraps Zcash-native proofs for EVM verification — enabling private transfers, withdrawals, and bridging without metadata leakage.
+
+[![License: MIT/Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
+[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
+
+> This project is under active development and has not been audited. Do not use in production with real funds.
+
+---
+
+## Why Escanorr?
+
+No production-grade Zcash ↔ EVM bridge exists. Zcash's privacy is single-chain. ESCANORR extends it cross-chain:
+
+- **Zcash-native cryptography**: Halo2 proving system over Pallas/Vesta curves — no trusted setup
+- **Cross-chain privacy**: Recursive proof wrapping (Halo2/IPA → Groth16/BN254) for EVM verification
+- **Zcash-family support**: Native compatibility with Horizen, Komodo, and Pirate Chain via shared circuit parameters
+- **Stealth addresses**: ECDH-based one-time addresses on Pallas for unlinkable receiving
+- **Poseidon hashing**: Algebraic hash function for efficient in-circuit operations
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     ESCANORR Architecture                           │
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────────┐  │
+│  │ escanorr-cli │  │ @escanorr/sdk(TS)│  │ escanorr-sdk (Rust) │  │
+│  │ REPL binary  │  │ HTTP client      │  │ High-level API      │  │
+│  └──────┬───────┘  └────────┬─────────┘  └──────────┬──────────┘  │
+│         │                   │                        │              │
+│  ┌──────▼───────────────────▼────────────────────────▼──────────┐  │
+│  │                    escanorr-rpc                               │  │
+│  │  Axum HTTP server · proof envelope unwrap · batch processing │  │
+│  └──────────────────────────┬───────────────────────────────────┘  │
+│                              │                                      │
+│  ┌───────────────────────────▼──────────────────────────────────┐  │
+│  │                    escanorr-bridge                            │  │
+│  │  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐   │  │
+│  │  │ ZcashAdapter│  │ EVMAdapter   │  │ ZcashForkAdapter  │   │  │
+│  │  │ (lightwalletd│ │ (recursive   │  │ (Horizen/Komodo/  │   │  │
+│  │  │  / zcashd)  │  │  proof wrap) │  │  Pirate Chain)    │   │  │
+│  │  └─────────────┘  └──────────────┘  └───────────────────┘   │  │
+│  └──────────────────────────┬───────────────────────────────────┘  │
+│                              │                                      │
+│  ┌──────┬───────────────────▼─────────────────────────────────┐   │
+│  │ escanorr-node          │  escanorr-contracts               │   │
+│  │ Prover daemon          │  PrivacyPool state machine        │   │
+│  │ Note relay/store       │  Epoch/nullifier management       │   │
+│  │ Batch accumulator      │  Cross-chain nullifier sync       │   │
+│  └──────┬─────────────────┴───────────────────────────────────┘   │
+│         │                                                          │
+│  ┌──────▼──────────┐  ┌──────────────────────────────────────┐   │
+│  │escanorr-prover  │  │ escanorr-verifier                    │   │
+│  │Halo2 IPA prove  │  │ Halo2 IPA verify                     │   │
+│  │BN254 wrap       │  │ Recursive BN254 verify               │   │
+│  └──────┬──────────┘  └──────────────────────────────────────┘   │
+│         │                                                         │
+│  ┌──────▼─────────────────────────────────────────────────────┐  │
+│  │                  escanorr-circuits                          │  │
+│  │  TransferCircuit (k=13) · WithdrawCircuit · BridgeCircuit  │  │
+│  └──────┬─────────────────┬──────────────────┬───────────────┘   │
+│         │                 │                   │                    │
+│  ┌──────▼─────┐  ┌───────▼──────┐  ┌────────▼───────────────┐   │
+│  │escanorr-   │  │escanorr-tree │  │escanorr-primitives     │   │
+│  │  note      │  │Merkle tree   │  │Poseidon hash           │   │
+│  │Note, keys  │  │depth=32      │  │Domain nullifiers       │   │
+│  │Encryption  │  │              │  │Proof envelopes         │   │
+│  │Stealth addr│  │              │  │                        │   │
+│  └────────────┘  └──────────────┘  └────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Crates
+
+| Crate                   | Description                                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **escanorr-primitives** | Field types (Pallas/Vesta), Poseidon hash, domain-separated nullifiers, proof envelopes                                         |
+| **escanorr-note**       | UTXO note model, key hierarchy (spending/viewing/full), ChaCha20-Poly1305 encryption, stealth addresses                         |
+| **escanorr-tree**       | Append-only incremental Merkle tree (depth 32, Poseidon)                                                                        |
+| **escanorr-circuits**   | Halo2 ZK circuits — transfer (2-in-2-out), withdraw, bridge (chain-ID distinctness)                                             |
+| **escanorr-prover**     | Proof generation with Halo2 IPA backend, sealed proof envelopes                                                                 |
+| **escanorr-verifier**   | Proof verification with Halo2 IPA backend                                                                                       |
+| **escanorr-contracts**  | Privacy pool state machine — deposits, withdrawals, transfers, epoch/nullifier tracking                                         |
+| **escanorr-node**       | Prover daemon state coordinator — transaction recording, pool management                                                        |
+| **escanorr-client**     | Wallet with BIP39 key derivation, note tracking, greedy coin selection                                                          |
+| **escanorr-bridge**     | Cross-chain adapter trait with chain support: Zcash, Horizen, Komodo, Pirate Chain, Ethereum, Polygon, Arbitrum, Optimism, Base |
+| **escanorr-sdk**        | High-level orchestrator — deposit, send, balance operations                                                                     |
+| **escanorr-rpc**        | Axum HTTP server with health, info, deposit, and transfer endpoints                                                             |
+| **escanorr-cli**        | CLI binary — serve, keygen, info, deposit, balance subcommands                                                                  |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Rust 1.75+** (`rustup update stable`)
+- **Git** (for Halo2 git dependencies)
+
+### Build
+
+```bash
+git clone https://github.com/Soul-Research-Labs/escanorr.git
+cd escanorr
+cargo build --release
+```
+
+### Run Tests
+
+```bash
+# Run all tests (prover tests take ~3 minutes due to Halo2 proof generation)
+cargo test
+
+# Run fast tests only (skip prover)
+cargo test --workspace --exclude escanorr-prover
+
+# Run a specific crate's tests
+cargo test -p escanorr-primitives
+cargo test -p escanorr-circuits
+```
+
+### Start the RPC Server
+
+```bash
+cargo run --release --bin escanorr-cli -- serve --port 3000
+```
+
+### Generate Keys
+
+```bash
+cargo run --release --bin escanorr-cli -- keygen
+```
+
+### CLI Usage
+
+```bash
+# Check node info
+cargo run --release --bin escanorr-cli -- info --host http://localhost:3000
+
+# Deposit
+cargo run --release --bin escanorr-cli -- deposit --host http://localhost:3000 --amount 100
+
+# Check balance
+cargo run --release --bin escanorr-cli -- balance --mnemonic "your twelve word mnemonic phrase goes here"
+```
+
+---
+
+## Cryptographic Primitives
+
+### Halo2 (IPA)
+
+The Zcash Halo2 proving system with Inner Product Argument commitments over the Pallas/Vesta curve cycle. No trusted setup required.
+
+### Pallas/Vesta Curve Cycle
+
+- **Pallas**: Main curve for note commitments, nullifiers, and stealth addresses
+- **Vesta**: Complement curve enabling efficient recursive proof composition
+
+### Poseidon Hash
+
+Algebraic hash function (P128Pow5T3 in circuits) with domain separation for:
+
+- Note commitments (`DOMAIN_NOTE_COMMITMENT`)
+- Nullifier derivation (`DOMAIN_NULLIFIER`)
+- Merkle tree nodes (`DOMAIN_MERKLE`)
+
+### Nullifiers
+
+Domain-separated with constant-time comparison (V1 for standard notes, V2 for cross-chain bridged notes). Prevents double-spending across chains.
+
+### Note Encryption
+
+- **ECDH** key agreement on Pallas
+- **HKDF-SHA256** symmetric key derivation
+- **ChaCha20-Poly1305** authenticated encryption
+
+### Proof Envelopes
+
+Fixed-size 32 KiB containers with random padding to prevent proof-size side channels. 4-byte LE length prefix, payload, then random fill.
+
+---
+
+## Cross-Chain Bridge Design
+
+ESCANORR bridges Zcash privacy to EVM chains via a two-step process:
+
+1. **Prove** (Zcash-native): Generate a Halo2/IPA proof over Pallas/Vesta for the privacy-preserving state transition
+2. **Wrap** (EVM-compatible): Recursively wrap the Halo2 proof into a Groth16/BN254 proof that EVM contracts can verify cheaply (~200K gas)
+
+### Supported Chains
+
+| Chain        | Type       | Adapter                                               |
+| ------------ | ---------- | ----------------------------------------------------- |
+| Zcash        | Native     | `ZcashAdapter` — shared circuit params, Pallas-native |
+| Horizen      | Zcash fork | `ZcashForkAdapter` — parameter-compatible             |
+| Komodo       | Zcash fork | `ZcashForkAdapter` — parameter-compatible             |
+| Pirate Chain | Zcash fork | `ZcashForkAdapter` — parameter-compatible             |
+| Ethereum     | EVM        | `EVMAdapter` — recursive proof wrapping               |
+| Polygon      | EVM        | `EVMAdapter` — recursive proof wrapping               |
+| Arbitrum     | EVM        | `EVMAdapter` — recursive proof wrapping               |
+| Optimism     | EVM        | `EVMAdapter` — recursive proof wrapping               |
+| Base         | EVM        | `EVMAdapter` — recursive proof wrapping               |
+
+---
+
+## Project Structure
+
+```
+escanorr/
+├── Cargo.toml                 # Workspace manifest
+├── crates/
+│   ├── escanorr-primitives/   # Field types, Poseidon, nullifiers, envelopes
+│   ├── escanorr-note/         # Note model, keys, encryption, stealth
+│   ├── escanorr-tree/         # Incremental Merkle tree (depth 32)
+│   ├── escanorr-circuits/     # Halo2 ZK circuits
+│   ├── escanorr-prover/       # Proof generation
+│   ├── escanorr-verifier/     # Proof verification
+│   ├── escanorr-contracts/    # Privacy pool state machine
+│   ├── escanorr-node/         # Node state coordinator
+│   ├── escanorr-client/       # Wallet & coin selection
+│   ├── escanorr-bridge/       # Cross-chain adapters
+│   ├── escanorr-sdk/          # High-level orchestrator
+│   ├── escanorr-rpc/          # Axum HTTP server
+│   └── escanorr-cli/          # CLI binary
+├── contracts/                  # Solidity (Foundry) — EVM verifier
+├── docs/                       # Architecture decision records
+├── sdks/                       # TypeScript SDK
+├── tests/                      # Integration tests
+├── benches/                    # Benchmarks
+├── fuzz/                       # Fuzz targets
+└── deploy/                     # Deployment configs
+```
+
+---
+
+## Inspired By
+
+- [ZAseon](https://github.com/Soul-Research-Labs/ZAseon) — Cross-chain ZK privacy middleware
+- [Lumora](https://github.com/Soul-Research-Labs/Lumora) — Halo2 privacy coprocessor
+- [Zcash Orchard](https://github.com/zcash/orchard) — Zcash's shielded protocol
+- [Penumbra](https://github.com/penumbra-zone/penumbra) — Private DEX/staking on Cosmos
+- [Aztec](https://github.com/AztecProtocol/aztec-packages) — EVM privacy layer
+
+---
+
+## License
+
+Licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+---
+
+## Contributing
+
+Contributions are welcome. Please open an issue first to discuss what you'd like to change.
+
+### Development
+
+```bash
+# Check formatting
+cargo fmt --all -- --check
+
+# Run clippy
+cargo clippy --workspace --all-targets
+
+# Run all tests
+cargo test --workspace
+
+# Build docs
+cargo doc --workspace --no-deps --open
+```
