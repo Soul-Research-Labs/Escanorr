@@ -62,6 +62,38 @@ jobs:
         run: cargo test -p escanorr-prover -- --test-threads=1
 
   # ──────────────────────────────────────────────────────────
+  # Rust benchmarks (compile check only)
+  # ──────────────────────────────────────────────────────────
+  rust-bench:
+    name: Rust Benchmarks (compile check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check benchmarks compile
+        run: |
+          cargo check -p escanorr-primitives --benches
+          cargo check -p escanorr-tree --benches
+          cargo check -p escanorr-note --benches
+
+  # ──────────────────────────────────────────────────────────
+  # Fuzz targets (compile check only)
+  # ──────────────────────────────────────────────────────────
+  rust-fuzz:
+    name: Fuzz Targets (compile check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - name: Check fuzz targets compile
+        working-directory: fuzz
+        run: cargo check --all-targets
+
+  # ──────────────────────────────────────────────────────────
   # Solidity contracts
   # ──────────────────────────────────────────────────────────
   solidity:
@@ -79,3 +111,37 @@ jobs:
         run: forge build
       - name: Test
         run: forge test -vvv
+
+  # ──────────────────────────────────────────────────────────
+  # TypeScript SDK
+  # ──────────────────────────────────────────────────────────
+  typescript-sdk:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: sdks/typescript/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Test
+        run: npm test
+
+  # ──────────────────────────────────────────────────────────
+  # Docker build check
+  # ──────────────────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t escanorr:ci --target builder .

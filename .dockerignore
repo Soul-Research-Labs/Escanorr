@@ -1,0 +1,34 @@
+# Dockerfile artifacts
+**/target
+**/out
+**/cache
+
+# Version control
+.git
+.github
+.gitmodules
+
+# Foundry (Solidity not needed in Rust image)
+contracts/
+
+# SDKs (not needed in Rust image)
+sdks/
+
+# Fuzz targets
+fuzz/target
+fuzz/corpus
+fuzz/artifacts
+
+# Benchmarks output
+target/criterion
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docs
+docs/
+*.md
+LICENSE-*

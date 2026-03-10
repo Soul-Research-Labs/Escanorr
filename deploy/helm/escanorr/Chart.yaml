@@ -1,0 +1,15 @@
+apiVersion: v2
+name: escanorr
+description: Zcash-native privacy coprocessor & cross-chain bridge
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - zcash
+  - privacy
+  - zero-knowledge
+  - bridge
+  - halo2
+maintainers:
+  - name: Soul Research Labs
+    url: https://github.com/Soul-Research-Labs
