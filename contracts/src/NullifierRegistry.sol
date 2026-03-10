@@ -16,6 +16,9 @@ contract NullifierRegistry {
         uint256 timestamp
     );
 
+    event CallerAuthorized(address indexed caller);
+    event CallerRevoked(address indexed caller);
+
     // ──────────────────────────────────────────────────────────────────
     // Errors
     // ──────────────────────────────────────────────────────────────────
@@ -23,6 +26,7 @@ contract NullifierRegistry {
     error NullifierAlreadySpent(bytes32 nullifier);
     error Unauthorized();
     error ZeroNullifier();
+    error ZeroAddress();
 
     // ──────────────────────────────────────────────────────────────────
     // State
@@ -34,10 +38,13 @@ contract NullifierRegistry {
     /// @notice Count of total nullifiers recorded
     uint256 public nullifierCount;
 
-    /// @notice Address authorized to record nullifiers (the PrivacyPool contract)
+    /// @notice Authorized callers (PrivacyPool, BridgeVault, etc.)
+    mapping(address => bool) public authorized;
+
+    /// @notice Legacy single-pool getter for backwards compatibility
     address public pool;
 
-    /// @notice Contract owner (can update pool address)
+    /// @notice Contract owner (can update authorized callers)
     address public owner;
 
     // ──────────────────────────────────────────────────────────────────
@@ -47,14 +54,15 @@ contract NullifierRegistry {
     constructor(address _pool) {
         owner = msg.sender;
         pool = _pool;
+        authorized[_pool] = true;
     }
 
     // ──────────────────────────────────────────────────────────────────
     // Modifiers
     // ──────────────────────────────────────────────────────────────────
 
-    modifier onlyPool() {
-        if (msg.sender != pool) revert Unauthorized();
+    modifier onlyAuthorized() {
+        if (!authorized[msg.sender]) revert Unauthorized();
         _;
     }
 
@@ -70,7 +78,7 @@ contract NullifierRegistry {
     /// @notice Record a nullifier as spent. Reverts if already spent.
     /// @param nullifier The 32-byte nullifier hash
     /// @param chainId The origin chain ID for cross-chain tracking
-    function spend(bytes32 nullifier, uint256 chainId) external onlyPool {
+    function spend(bytes32 nullifier, uint256 chainId) external onlyAuthorized {
         if (nullifier == bytes32(0)) revert ZeroNullifier();
         if (nullifiers[nullifier]) revert NullifierAlreadySpent(nullifier);
 
@@ -99,10 +107,28 @@ contract NullifierRegistry {
         }
     }
 
-    /// @notice Update the authorized pool address
+    /// @notice Authorize a new caller (e.g. BridgeVault, additional pool)
+    /// @param caller Address to authorize
+    function authorize(address caller) external onlyOwner {
+        if (caller == address(0)) revert ZeroAddress();
+        authorized[caller] = true;
+        emit CallerAuthorized(caller);
+    }
+
+    /// @notice Revoke an authorized caller
+    /// @param caller Address to revoke
+    function revoke(address caller) external onlyOwner {
+        authorized[caller] = false;
+        emit CallerRevoked(caller);
+    }
+
+    /// @notice Update the primary pool address (backwards-compatible)
     /// @param _pool New pool contract address
     function setPool(address _pool) external onlyOwner {
+        // Revoke old pool, authorize new one
+        authorized[pool] = false;
         pool = _pool;
+        authorized[_pool] = true;
     }
 
     /// @notice Transfer ownership

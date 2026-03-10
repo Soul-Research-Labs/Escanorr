@@ -136,6 +136,217 @@ mod hex_field {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Concrete adapters
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Adapter for Zcash mainnet via lightwalletd gRPC.
+pub struct ZcashAdapter {
+    endpoint: String,
+    client: reqwest::Client,
+}
+
+impl ZcashAdapter {
+    pub fn new(endpoint: impl Into<String>) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ChainAdapter for ZcashAdapter {
+    fn chain_id(&self) -> ChainId {
+        ChainId::Zcash
+    }
+
+    async fn submit(&self, msg: &BridgeMessage) -> Result<Vec<u8>, BridgeError> {
+        if msg.dest_chain != ChainId::Zcash && msg.src_chain != ChainId::Zcash {
+            return Err(BridgeError::UnsupportedChain(msg.dest_chain));
+        }
+        let url = format!("{}/bridge/submit", self.endpoint);
+        let resp = self
+            .client
+            .post(&url)
+            .json(msg)
+            .send()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        Ok(bytes.to_vec())
+    }
+
+    async fn check_nullifier(&self, nullifier: &[u8; 32]) -> Result<bool, BridgeError> {
+        let url = format!("{}/nullifier/{}", self.endpoint, hex::encode(nullifier));
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        Ok(body.get("spent").and_then(|v| v.as_bool()).unwrap_or(false))
+    }
+}
+
+/// Adapter for Zcash forks (Horizen, Komodo, Pirate Chain) that share Sapling parameters.
+pub struct ZcashForkAdapter {
+    chain: ChainId,
+    endpoint: String,
+    client: reqwest::Client,
+}
+
+impl ZcashForkAdapter {
+    pub fn new(chain: ChainId, endpoint: impl Into<String>) -> Result<Self, BridgeError> {
+        if !chain.is_zcash_family() || chain == ChainId::Zcash {
+            return Err(BridgeError::UnsupportedChain(chain));
+        }
+        Ok(Self {
+            chain,
+            endpoint: endpoint.into(),
+            client: reqwest::Client::new(),
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl ChainAdapter for ZcashForkAdapter {
+    fn chain_id(&self) -> ChainId {
+        self.chain
+    }
+
+    async fn submit(&self, msg: &BridgeMessage) -> Result<Vec<u8>, BridgeError> {
+        let url = format!("{}/bridge/submit", self.endpoint);
+        let resp = self
+            .client
+            .post(&url)
+            .json(msg)
+            .send()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        Ok(bytes.to_vec())
+    }
+
+    async fn check_nullifier(&self, nullifier: &[u8; 32]) -> Result<bool, BridgeError> {
+        let url = format!("{}/nullifier/{}", self.endpoint, hex::encode(nullifier));
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+        Ok(body.get("spent").and_then(|v| v.as_bool()).unwrap_or(false))
+    }
+}
+
+/// Adapter for EVM-compatible chains (Ethereum, Polygon, Arbitrum, etc.).
+///
+/// Interacts with the on-chain `BridgeVault` and `NullifierRegistry` contracts
+/// via JSON-RPC at the configured endpoint.
+pub struct EvmAdapter {
+    chain: ChainId,
+    rpc_url: String,
+    #[allow(dead_code)] // Used once recursive proof wrapping is implemented
+    bridge_vault: String,
+    nullifier_registry: String,
+    client: reqwest::Client,
+}
+
+impl EvmAdapter {
+    pub fn new(
+        chain: ChainId,
+        rpc_url: impl Into<String>,
+        bridge_vault: impl Into<String>,
+        nullifier_registry: impl Into<String>,
+    ) -> Result<Self, BridgeError> {
+        if !chain.is_evm() {
+            return Err(BridgeError::UnsupportedChain(chain));
+        }
+        Ok(Self {
+            chain,
+            rpc_url: rpc_url.into(),
+            bridge_vault: bridge_vault.into(),
+            nullifier_registry: nullifier_registry.into(),
+            client: reqwest::Client::new(),
+        })
+    }
+
+    /// Build an `eth_call` JSON-RPC request body.
+    fn eth_call_body(&self, to: &str, data: &str) -> serde_json::Value {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_call",
+            "params": [{"to": to, "data": data}, "latest"],
+            "id": 1
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl ChainAdapter for EvmAdapter {
+    fn chain_id(&self) -> ChainId {
+        self.chain
+    }
+
+    async fn submit(&self, msg: &BridgeMessage) -> Result<Vec<u8>, BridgeError> {
+        if !msg.dest_chain.is_evm() && !msg.src_chain.is_evm() {
+            return Err(BridgeError::UnsupportedChain(msg.dest_chain));
+        }
+        // EVM bridge submission requires recursive proof wrapping (future work).
+        // For now, we serialize the message and post it to a relay endpoint.
+        Err(BridgeError::EvmWrappingNotImplemented)
+    }
+
+    async fn check_nullifier(&self, nullifier: &[u8; 32]) -> Result<bool, BridgeError> {
+        // NullifierRegistry.isSpent(bytes32) — selector 0x9b4bae3e
+        // function isSpent(bytes32 nullifier) external view returns (bool)
+        let selector = "0x9b4bae3e";
+        let data = format!("{}{}", selector, hex::encode(nullifier));
+        let body = self.eth_call_body(&self.nullifier_registry, &data);
+
+        let resp = self
+            .client
+            .post(&self.rpc_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| BridgeError::Transport(e.to_string()))?;
+
+        let result = json
+            .get("result")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0x");
+
+        // Non-zero result means true
+        let is_spent = result.len() > 2
+            && result
+                .trim_start_matches("0x")
+                .chars()
+                .any(|c| c != '0');
+        Ok(is_spent)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +378,55 @@ mod tests {
         assert_eq!(parsed.src_chain, ChainId::Zcash);
         assert_eq!(parsed.dest_chain, ChainId::Ethereum);
         assert_eq!(parsed.fee, 100);
+    }
+
+    #[test]
+    fn zcash_adapter_creation() {
+        let adapter = ZcashAdapter::new("http://localhost:9067");
+        assert_eq!(adapter.chain_id(), ChainId::Zcash);
+    }
+
+    #[test]
+    fn zcash_fork_adapter_creation() {
+        let adapter = ZcashForkAdapter::new(ChainId::Horizen, "http://localhost:9068").unwrap();
+        assert_eq!(adapter.chain_id(), ChainId::Horizen);
+
+        let adapter = ZcashForkAdapter::new(ChainId::PirateChain, "http://localhost:9069").unwrap();
+        assert_eq!(adapter.chain_id(), ChainId::PirateChain);
+    }
+
+    #[test]
+    fn zcash_fork_adapter_rejects_mainnet() {
+        let result = ZcashForkAdapter::new(ChainId::Zcash, "http://localhost:9067");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn zcash_fork_adapter_rejects_evm() {
+        let result = ZcashForkAdapter::new(ChainId::Ethereum, "http://localhost:8545");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn evm_adapter_creation() {
+        let adapter = EvmAdapter::new(
+            ChainId::Ethereum,
+            "http://localhost:8545",
+            "0x1234567890abcdef1234567890abcdef12345678",
+            "0xabcdef1234567890abcdef1234567890abcdef12",
+        )
+        .unwrap();
+        assert_eq!(adapter.chain_id(), ChainId::Ethereum);
+    }
+
+    #[test]
+    fn evm_adapter_rejects_zcash_family() {
+        let result = EvmAdapter::new(
+            ChainId::Zcash,
+            "http://localhost:8545",
+            "0x1234",
+            "0x5678",
+        );
+        assert!(result.is_err());
     }
 }

@@ -1,6 +1,6 @@
 //! Route handlers for the RPC server.
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{extract::{Path, State}, http::StatusCode, Json};
 use escanorr_primitives::Base;
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,54 @@ pub struct TransferBody {
 #[derive(Serialize)]
 pub struct RootResponse {
     pub root: String,
+}
+
+/// Withdraw request body.
+#[derive(Deserialize)]
+pub struct WithdrawBody {
+    pub nullifier: String,
+    pub merkle_root: String,
+    pub exit_value: u64,
+    pub change_commitment: Option<String>,
+}
+
+/// Withdraw response.
+#[derive(Serialize)]
+pub struct WithdrawResponse {
+    pub nullifier: String,
+    pub exit_value: u64,
+}
+
+/// Nullifier check response.
+#[derive(Serialize)]
+pub struct NullifierResponse {
+    pub spent: bool,
+}
+
+/// Bridge lock request body.
+#[derive(Deserialize)]
+pub struct BridgeLockBody {
+    pub nullifier: String,
+    pub commitment_hash: String,
+    #[allow(dead_code)] // Stored for future multi-chain routing
+    pub source_chain_id: String,
+    #[allow(dead_code)]
+    pub destination_chain_id: String,
+    pub amount: u64,
+}
+
+/// Bridge lock response.
+#[derive(Serialize)]
+pub struct BridgeLockResponse {
+    pub nullifier: String,
+    pub status: &'static str,
+}
+
+/// Bridge status response.
+#[derive(Serialize)]
+pub struct BridgeStatusResponse {
+    pub nullifier: String,
+    pub status: &'static str,
 }
 
 fn base_to_hex(b: &Base) -> String {
@@ -127,4 +175,72 @@ pub async fn post_transfer(
         .map_err(|_| StatusCode::CONFLICT)?;
 
     Ok(StatusCode::OK)
+}
+
+/// POST /withdraw
+pub async fn post_withdraw(
+    State(state): State<AppState>,
+    Json(body): Json<WithdrawBody>,
+) -> Result<Json<WithdrawResponse>, StatusCode> {
+    let nullifier = hex_to_base(&body.nullifier)?;
+    let merkle_root = hex_to_base(&body.merkle_root)?;
+    let change_commitment = body
+        .change_commitment
+        .as_deref()
+        .map(hex_to_base)
+        .transpose()?;
+
+    let mut node = state.write().await;
+    node.withdraw(nullifier, merkle_root, body.exit_value, change_commitment)
+        .map_err(|_| StatusCode::CONFLICT)?;
+
+    Ok(Json(WithdrawResponse {
+        nullifier: body.nullifier,
+        exit_value: body.exit_value,
+    }))
+}
+
+/// GET /nullifier/:nf
+pub async fn get_nullifier(
+    State(state): State<AppState>,
+    Path(nf): Path<String>,
+) -> Result<Json<NullifierResponse>, StatusCode> {
+    let nullifier = hex_to_base(&nf)?;
+    let node = state.read().await;
+    let spent = node.pool().nullifier_set().contains(&nullifier);
+    Ok(Json(NullifierResponse { spent }))
+}
+
+/// POST /bridge/lock
+pub async fn post_bridge_lock(
+    State(state): State<AppState>,
+    Json(body): Json<BridgeLockBody>,
+) -> Result<Json<BridgeLockResponse>, StatusCode> {
+    let nullifier = hex_to_base(&body.nullifier)?;
+    let merkle_root = hex_to_base(&body.commitment_hash)?;
+
+    // Record the nullifier spend via a withdrawal in the node state
+    let mut node = state.write().await;
+    node.withdraw(nullifier, merkle_root, body.amount, None)
+        .map_err(|_| StatusCode::CONFLICT)?;
+
+    Ok(Json(BridgeLockResponse {
+        nullifier: body.nullifier,
+        status: "pending",
+    }))
+}
+
+/// GET /bridge/status/:nf
+pub async fn get_bridge_status(
+    State(state): State<AppState>,
+    Path(nf): Path<String>,
+) -> Result<Json<BridgeStatusResponse>, StatusCode> {
+    let nullifier = hex_to_base(&nf)?;
+    let node = state.read().await;
+    let spent = node.pool().nullifier_set().contains(&nullifier);
+    let status = if spent { "confirmed" } else { "pending" };
+    Ok(Json(BridgeStatusResponse {
+        nullifier: nf,
+        status,
+    }))
 }

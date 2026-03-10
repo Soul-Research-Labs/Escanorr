@@ -8,4 +8,7 @@
 
 mod adapter;
 
-pub use adapter::{ChainAdapter, ChainId, BridgeMessage, BridgeError};
+pub use adapter::{
+    ChainAdapter, ChainId, BridgeMessage, BridgeError,
+    ZcashAdapter, ZcashForkAdapter, EvmAdapter,
+};

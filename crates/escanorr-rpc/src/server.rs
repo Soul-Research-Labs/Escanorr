@@ -19,6 +19,10 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         .route("/info", get(routes::get_info))
         .route("/deposit", post(routes::post_deposit))
         .route("/transfer", post(routes::post_transfer))
+        .route("/withdraw", post(routes::post_withdraw))
+        .route("/nullifier/{nf}", get(routes::get_nullifier))
+        .route("/bridge/lock", post(routes::post_bridge_lock))
+        .route("/bridge/status/{nf}", get(routes::get_bridge_status))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

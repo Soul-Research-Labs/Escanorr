@@ -117,4 +117,112 @@ contract NullifierRegistryTest is Test {
 
         assertEq(registry.nullifierCount(), 10);
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Multi-pool ACL tests
+    // ──────────────────────────────────────────────────────────────────
+
+    function test_authorize() public {
+        address bridgeVault = address(0xBB);
+        registry.authorize(bridgeVault);
+        assertTrue(registry.authorized(bridgeVault));
+    }
+
+    function test_authorize_emitsEvent() public {
+        address bridgeVault = address(0xBB);
+        vm.expectEmit(true, false, false, false);
+        emit NullifierRegistry.CallerAuthorized(bridgeVault);
+        registry.authorize(bridgeVault);
+    }
+
+    function test_authorize_revert_unauthorized() public {
+        vm.prank(address(0xDEAD));
+        vm.expectRevert(NullifierRegistry.Unauthorized.selector);
+        registry.authorize(address(0xBB));
+    }
+
+    function test_authorize_revert_zeroAddress() public {
+        vm.expectRevert(NullifierRegistry.ZeroAddress.selector);
+        registry.authorize(address(0));
+    }
+
+    function test_authorizedCallerCanSpend() public {
+        address bridgeVault = address(0xBB);
+        registry.authorize(bridgeVault);
+
+        bytes32 nf = keccak256("bridge-nf");
+        vm.prank(bridgeVault);
+        registry.spend(nf, 1_000_001);
+
+        assertTrue(registry.isSpent(nf));
+    }
+
+    function test_revoke() public {
+        address bridgeVault = address(0xBB);
+        registry.authorize(bridgeVault);
+        assertTrue(registry.authorized(bridgeVault));
+
+        registry.revoke(bridgeVault);
+        assertFalse(registry.authorized(bridgeVault));
+    }
+
+    function test_revoke_emitsEvent() public {
+        address bridgeVault = address(0xBB);
+        registry.authorize(bridgeVault);
+
+        vm.expectEmit(true, false, false, false);
+        emit NullifierRegistry.CallerRevoked(bridgeVault);
+        registry.revoke(bridgeVault);
+    }
+
+    function test_revokedCallerCannotSpend() public {
+        address bridgeVault = address(0xBB);
+        registry.authorize(bridgeVault);
+        registry.revoke(bridgeVault);
+
+        bytes32 nf = keccak256("revoked-nf");
+        vm.prank(bridgeVault);
+        vm.expectRevert(NullifierRegistry.Unauthorized.selector);
+        registry.spend(nf, 1);
+    }
+
+    function test_setPool_revokesOldPool() public {
+        assertTrue(registry.authorized(pool));
+
+        address newPool = address(0xCAFE);
+        registry.setPool(newPool);
+
+        assertEq(registry.pool(), newPool);
+        assertTrue(registry.authorized(newPool));
+        assertFalse(registry.authorized(pool));
+    }
+
+    function test_poolIsAuthorizedByDefault() public view {
+        assertTrue(registry.authorized(pool));
+    }
+
+    function test_multipleAuthorizedCallers() public {
+        address vault = address(0xBB);
+        address relayer = address(0xCC);
+        registry.authorize(vault);
+        registry.authorize(relayer);
+
+        bytes32 nf1 = keccak256("pool-nf");
+        bytes32 nf2 = keccak256("vault-nf");
+        bytes32 nf3 = keccak256("relayer-nf");
+
+        vm.prank(pool);
+        registry.spend(nf1, 1);
+
+        vm.prank(vault);
+        registry.spend(nf2, 1_000_001);
+
+        vm.prank(relayer);
+        registry.spend(nf3, 1_000_137);
+
+        assertEq(registry.nullifierCount(), 3);
+        assertTrue(registry.isSpent(nf1));
+        assertTrue(registry.isSpent(nf2));
+        assertTrue(registry.isSpent(nf3));
+    }
 }
