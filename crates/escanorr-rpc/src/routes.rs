@@ -108,6 +108,10 @@ fn base_to_hex(b: &Base) -> String {
 }
 
 fn hex_to_base(s: &str) -> Result<Base, StatusCode> {
+    // Validate hex string length: must be exactly 64 hex chars (32 bytes)
+    if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let bytes = hex::decode(s).map_err(|_| StatusCode::BAD_REQUEST)?;
     let arr: [u8; 32] = bytes
         .try_into()

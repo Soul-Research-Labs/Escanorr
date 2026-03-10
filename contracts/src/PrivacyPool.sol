@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Groth16Verifier} from "./Groth16Verifier.sol";
 import {NullifierRegistry} from "./NullifierRegistry.sol";
+import {IncrementalMerkleTree} from "./IncrementalMerkleTree.sol";
 
 /// @title Privacy Pool for ESCANORR
 /// @notice Manages shielded deposits, withdrawals, and transfers on EVM chains.
@@ -13,6 +14,8 @@ import {NullifierRegistry} from "./NullifierRegistry.sol";
 ///      handled by the Groth16Verifier (which verifies recursively wrapped
 ///      Halo2/IPA proofs).
 contract PrivacyPool {
+    using IncrementalMerkleTree for IncrementalMerkleTree.Tree;
+
     // ──────────────────────────────────────────────────────────────────
     // Events
     // ──────────────────────────────────────────────────────────────────
@@ -83,6 +86,9 @@ contract PrivacyPool {
     /// @notice Chain ID for nullifier domain separation
     uint256 public immutable chainId;
 
+    /// @notice On-chain incremental Merkle tree for note commitments
+    IncrementalMerkleTree.Tree private merkleTree;
+
     // ──────────────────────────────────────────────────────────────────
     // Constructor
     // ──────────────────────────────────────────────────────────────────
@@ -96,6 +102,9 @@ contract PrivacyPool {
         // Initialize with empty root
         currentRoot = bytes32(0);
         knownRoots[bytes32(0)] = true;
+
+        // Initialize the on-chain Merkle tree
+        merkleTree.init();
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -131,14 +140,16 @@ contract PrivacyPool {
 
         totalValueLocked += msg.value;
 
-        // In production, update the on-chain Merkle tree here.
-        // For now, the root is updated by the relayer/operator after
-        // computing the new root off-chain with Poseidon.
+        // Insert into the on-chain incremental Merkle tree
+        merkleTree.insert(commitment);
+        currentRoot = merkleTree.getRoot();
+        knownRoots[currentRoot] = true;
+
         emit Deposit(commitment, leafIndex, msg.value, block.timestamp);
     }
 
-    /// @notice Update the Merkle root after new deposits
-    /// @dev Called by the operator/relayer after computing the new root off-chain
+    /// @notice Manually update the Merkle root (for emergency/migration scenarios)
+    /// @dev The tree now auto-updates on deposit. This remains for operator overrides.
     /// @param newRoot The new Merkle root
     function updateMerkleRoot(bytes32 newRoot) external onlyOwner {
         currentRoot = newRoot;

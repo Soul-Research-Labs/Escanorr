@@ -1,13 +1,20 @@
 //! Axum server setup and configuration.
 
 use crate::routes::{self, AppState};
-use axum::{routing::{get, post}, Router};
+use axum::{
+    extract::DefaultBodyLimit,
+    routing::{get, post},
+    Router,
+};
 use escanorr_node::NodeState;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use tracing::info;
+
+/// Maximum request body size: 64 KiB (prevents oversized payloads).
+const MAX_BODY_SIZE: usize = 64 * 1024;
 
 /// Run the ESCANORR RPC server on the given address.
 pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
@@ -23,6 +30,7 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         .route("/nullifier/{nf}", get(routes::get_nullifier))
         .route("/bridge/lock", post(routes::post_bridge_lock))
         .route("/bridge/status/{nf}", get(routes::get_bridge_status))
+        .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

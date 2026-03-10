@@ -15,7 +15,7 @@ RUN cargo build --release --bin escanorr-cli \
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    ca-certificates wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user
@@ -28,7 +28,7 @@ USER escanorr
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/escanorr", "info", "--host", "http://localhost:3000"]
+    CMD wget -qO- http://localhost:3000/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/escanorr"]
-CMD ["serve", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["serve", "--addr", "0.0.0.0:3000"]
