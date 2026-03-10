@@ -242,6 +242,23 @@ escanorr/
 
 ---
 
+## Production Readiness Checklist
+
+Before deploying with real funds, complete every item below:
+
+- [ ] **Security audit** — Independent audit of all Halo2 circuits, Solidity contracts, and bridge adapter code
+- [ ] **Groth16 verification key** — Replace the placeholder VK in `Groth16Verifier.sol` with keys generated from a trusted setup ceremony (see [Groth16 Setup Guide](docs/guides/groth16-setup.md))
+- [ ] **Bridge relayer** — Implement and deploy the cross-chain bridge relayer (see [ADR-005](docs/adr/005-bridge-relayer-architecture.md))
+- [ ] **Recursive proof wrapping** — Complete the `snark-verifier` integration in `EvmAdapter::submit()` (currently returns `EvmWrappingNotImplemented`)
+- [ ] **On-chain Merkle tree depth** — Verify the depth-32 IncrementalMerkleTree gas profile meets target chain block limits
+- [ ] **Key management** — Hardware-backed key storage for relayer signing keys and contract admin keys
+- [ ] **Rate limiting** — Deploy per-IP rate limiting (the RPC server has a 64 KiB body limit but no rate limiter)
+- [ ] **Monitoring** — Prometheus metrics export with alerting on nullifier-set growth, pool balance, and proof generation latency
+- [ ] **Incident response** — Emergency pause procedures tested; owner multisig deployed
+- [ ] **Fuzz testing** — Run `cargo fuzz` targets for extended duration (current CI only compile-checks)
+
+---
+
 ## Inspired By
 
 - [ZAseon](https://github.com/Soul-Research-Labs/ZAseon) — Cross-chain ZK privacy middleware

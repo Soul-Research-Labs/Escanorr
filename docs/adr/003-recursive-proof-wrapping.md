@@ -38,3 +38,13 @@ Use recursive proof wrapping: generate a Groth16/BN254 proof that attests to the
 - A single IPA-verified proof works for all Zcash-family chains
 - EVM chains pay gas only for Groth16 verification
 - The bridge adapter determines which verification path to use based on `ChainId::is_evm()`
+
+## Implementation Status
+
+| Component                           | Status                             | Notes                                                                                                                                                    |
+| ----------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Groth16Verifier.sol`               | Deployed (placeholder VK)          | On-chain contract accepts Groth16 proofs; the verification key is a placeholder and must be replaced with a production key from a trusted setup ceremony |
+| `EvmAdapter::submit()`              | Stub (`EvmWrappingNotImplemented`) | The EVM adapter correctly identifies EVM chains and validates bridge messages, but the actual `snark-verifier` wrapping call is not yet wired            |
+| `ZcashAdapter` / `ZcashForkAdapter` | Functional                         | Zcash-family chains skip wrapping entirely — Halo2/IPA proofs are submitted directly                                                                     |
+| `snark-verifier` integration        | Not started                        | Requires: (1) wrapping circuit definition, (2) Perpetual Powers of Tau SRS download, (3) Groth16 key generation, (4) proof-of-concept benchmark          |
+| `IncrementalMerkleTree.sol`         | Complete                           | On-chain Merkle tree auto-updates root on deposit; integrated into `PrivacyPool.sol`                                                                     |

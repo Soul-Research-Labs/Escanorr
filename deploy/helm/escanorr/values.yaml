@@ -1,30 +1,49 @@
+# -- Number of pod replicas. Set to 1 for single-node; increase for HA.
 replicaCount: 1
 
+# -- Container image configuration
 image:
+  # -- Image registry and repository
   repository: ghcr.io/soul-research-labs/escanorr
+  # -- Pull policy: Always for latest, IfNotPresent for tagged releases
   pullPolicy: IfNotPresent
+  # -- Image tag. Defaults to the chart appVersion if empty.
   tag: "" # defaults to Chart.appVersion
 
+# -- Override the chart name in generated resource names
 nameOverride: ""
+# -- Override the full release name (takes precedence over nameOverride)
 fullnameOverride: ""
 
+# -- Kubernetes Service configuration
 service:
+  # -- Service type: ClusterIP (internal), LoadBalancer (external), or NodePort
   type: ClusterIP
+  # -- Port the service listens on (must match ESCANORR_PORT)
   port: 3000
 
+# -- Environment variables injected into the container
 env:
+  # -- Rust log filter. Use "debug" for development, "info" for production.
   RUST_LOG: "info,escanorr=debug"
+  # -- Bind address for the RPC server (0.0.0.0 = all interfaces)
   ESCANORR_HOST: "0.0.0.0"
+  # -- RPC server port (must match service.port)
   ESCANORR_PORT: "3000"
 
+# -- CPU and memory resource requests/limits
+# Proof generation is CPU-intensive; adjust limits for prover workloads.
 resources:
   requests:
     memory: "256Mi"
     cpu: "250m"
   limits:
+    # -- 1 GiB covers the in-memory Merkle tree and proof buffers
     memory: "1Gi"
+    # -- 2 cores for Halo2 proof generation; reduce for relay-only nodes
     cpu: "2000m"
 
+# -- Liveness probe: restarts the pod if /health stops responding
 livenessProbe:
   httpGet:
     path: /health
@@ -32,6 +51,7 @@ livenessProbe:
   initialDelaySeconds: 10
   periodSeconds: 30
 
+# -- Readiness probe: removes the pod from service if /health fails
 readinessProbe:
   httpGet:
     path: /health
@@ -39,11 +59,18 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
+# -- Node selector for scheduling (e.g., {"disktype": "ssd"})
 nodeSelector: {}
+# -- Tolerations for taints
 tolerations: []
+# -- Affinity rules for pod scheduling
 affinity: {}
 
+# -- ServiceAccount configuration
 serviceAccount:
+  # -- Create a dedicated service account for the pods
   create: true
+  # -- Name override (auto-generated if empty)
   name: ""
+  # -- Annotations (e.g., for IAM role binding on AWS/GCP)
   annotations: {}
