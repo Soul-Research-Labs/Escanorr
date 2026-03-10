@@ -41,3 +41,4 @@ Thumbs.db
 wallet.json
 snapshot_*.bin
 wal.log
+contracts/lib/

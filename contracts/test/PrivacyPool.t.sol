@@ -162,4 +162,116 @@ contract PrivacyPoolTest is Test {
         assertTrue(pool.isKnownRoot(root2));
         assertEq(pool.currentRoot(), root2);
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Edge-case & security tests
+    // ──────────────────────────────────────────────────────────────────
+
+    function test_deposit_updatesOnChainMerkleRoot() public {
+        bytes32 rootBefore = pool.currentRoot();
+
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+
+        bytes32 rootAfter = pool.currentRoot();
+        assertTrue(rootBefore != rootAfter, "Root should change after deposit");
+        assertTrue(pool.isKnownRoot(rootAfter), "New root should be known");
+    }
+
+    function test_deposit_sequentialDepositsProduceDifferentRoots() public {
+        vm.startPrank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+        bytes32 root1 = pool.currentRoot();
+
+        pool.deposit{value: 1 ether}(keccak256("c2"));
+        bytes32 root2 = pool.currentRoot();
+        vm.stopPrank();
+
+        assertTrue(
+            root1 != root2,
+            "Different deposits should produce different roots"
+        );
+        assertTrue(pool.isKnownRoot(root1));
+        assertTrue(pool.isKnownRoot(root2));
+    }
+
+    function test_deposit_maxValue() public {
+        vm.deal(user, 200 ether);
+        vm.prank(user);
+        uint256 idx = pool.deposit{value: 100 ether}(keccak256("max"));
+        assertEq(idx, 0);
+        assertEq(pool.totalValueLocked(), 100 ether);
+    }
+
+    function test_deposit_exactlyMaxValue() public {
+        vm.deal(user, 200 ether);
+        vm.prank(user);
+        // 100 ether = MAX_DEPOSIT, should succeed
+        pool.deposit{value: 100 ether}(keccak256("exactly-max"));
+        assertEq(pool.totalValueLocked(), 100 ether);
+    }
+
+    function test_unpause_revert_unauthorized() public {
+        pool.pause();
+        vm.prank(user);
+        vm.expectRevert(PrivacyPool.Unauthorized.selector);
+        pool.unpause();
+    }
+
+    function test_transferOwnership_revert_unauthorized() public {
+        vm.prank(user);
+        vm.expectRevert(PrivacyPool.Unauthorized.selector);
+        pool.transferOwnership(user);
+    }
+
+    function test_deposit_afterUnpause() public {
+        pool.pause();
+        pool.unpause();
+
+        vm.prank(user);
+        uint256 idx = pool.deposit{value: 1 ether}(keccak256("after-unpause"));
+        assertEq(idx, 0);
+    }
+
+    function test_multipleDeposits_treeSizeCorrect() public {
+        vm.startPrank(user);
+        for (uint256 i = 0; i < 10; i++) {
+            pool.deposit{value: 1 ether}(keccak256(abi.encode(i)));
+        }
+        vm.stopPrank();
+
+        assertEq(pool.leafCount(), 10);
+        assertEq(pool.totalValueLocked(), 10 ether);
+    }
+
+    function test_getCommitment_returnsZeroForUnsetIndex() public view {
+        assertEq(pool.getCommitment(999), bytes32(0));
+    }
+
+    function test_isKnownRoot_emptyRootIsKnown() public view {
+        assertTrue(pool.isKnownRoot(bytes32(0)));
+    }
+
+    function test_isKnownRoot_randomRootNotKnown() public view {
+        assertFalse(pool.isKnownRoot(keccak256("random-unknown-root")));
+    }
+
+    function testFuzz_deposit_anyValidAmount(uint256 amount) public {
+        amount = bound(amount, 1, 100 ether);
+        vm.deal(user, amount);
+        vm.prank(user);
+        uint256 idx = pool.deposit{value: amount}(
+            keccak256(abi.encode(amount))
+        );
+        assertEq(idx, 0);
+        assertEq(pool.totalValueLocked(), amount);
+    }
+
+    function testFuzz_deposit_rejectsOverMax(uint256 amount) public {
+        amount = bound(amount, 100 ether + 1, type(uint256).max);
+        vm.deal(user, amount);
+        vm.prank(user);
+        vm.expectRevert(PrivacyPool.InvalidAmount.selector);
+        pool.deposit{value: amount}(keccak256("overmax"));
+    }
 }

@@ -26,3 +26,5 @@ async-trait.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+escanorr-primitives.workspace = true
+serde_json.workspace = true
