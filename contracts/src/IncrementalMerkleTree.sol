@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title Incremental Merkle Tree with Poseidon-style hashing
+import {PoseidonT3} from "poseidon-solidity/PoseidonT3.sol";
+
+/// @title Incremental Merkle Tree with Poseidon hashing (BN254)
 /// @notice Gas-efficient append-only Merkle tree for note commitments.
-/// @dev Uses a simplified Poseidon-like hash (modular arithmetic over BN254 scalar field).
-///      In production, replace `_hash` with a proper Poseidon precompile or assembly
-///      implementation once EIP-5988 or equivalent is available.
+/// @dev Uses the standard Poseidon T3 hash (width=3, 2 inputs) over the BN254
+///      scalar field.  The off-chain Halo2 circuits operate on Pallas, so roots
+///      differ until recursive proof wrapping (Halo2 → Groth16) is implemented.
 library IncrementalMerkleTree {
     /// @notice Maximum depth of the tree
     uint256 internal constant DEPTH = 32;
-
-    /// @notice BN254 scalar field modulus
-    uint256 internal constant FIELD_MODULUS =
-        21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
     struct Tree {
         /// @notice Number of leaves inserted
@@ -88,38 +86,12 @@ library IncrementalMerkleTree {
     // Hash function
     // ──────────────────────────────────────────────────────────────────
 
-    /// @notice Poseidon-style hash of two field elements
-    /// @dev Simplified algebraic hash: H(l, r) = (l + r)^5 + l*r + c  mod p
-    ///      This mirrors the Rust-side Poseidon used in escanorr-primitives.
-    ///      For production, use a gas-optimized Poseidon assembly implementation.
+    /// @notice Poseidon hash of two field elements (BN254, T=3)
     function _hash(
         bytes32 left,
         bytes32 right
     ) internal pure returns (bytes32) {
-        uint256 l = uint256(left) % FIELD_MODULUS;
-        uint256 r = uint256(right) % FIELD_MODULUS;
-
-        // Constant for domain separation
-        uint256 c = 0x0ee9a592ba9a9518d05986d656f40c2114c4993c11bb29938d21d47304cd8e6e;
-
-        // sum = l + r mod p
-        uint256 sum = addmod(l, r, FIELD_MODULUS);
-        // sum^2
-        uint256 sum2 = mulmod(sum, sum, FIELD_MODULUS);
-        // sum^4
-        uint256 sum4 = mulmod(sum2, sum2, FIELD_MODULUS);
-        // sum^5
-        uint256 sum5 = mulmod(sum4, sum, FIELD_MODULUS);
-        // l * r
-        uint256 lr = mulmod(l, r, FIELD_MODULUS);
-        // result = sum^5 + l*r + c mod p
-        uint256 result = addmod(
-            addmod(sum5, lr, FIELD_MODULUS),
-            c,
-            FIELD_MODULUS
-        );
-
-        return bytes32(result);
+        return bytes32(PoseidonT3.hash([uint256(left), uint256(right)]));
     }
 
     // ──────────────────────────────────────────────────────────────────
