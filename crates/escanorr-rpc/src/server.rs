@@ -1,24 +1,32 @@
 //! Axum server setup and configuration.
 
-use crate::routes::{self, AppState};
+use crate::routes::{self, SharedState, AppState};
 use axum::{
     extract::DefaultBodyLimit,
     routing::{get, post},
     Router,
 };
 use escanorr_node::NodeState;
+use escanorr_verifier::VerifierParams;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
-/// Maximum request body size: 64 KiB (prevents oversized payloads).
-const MAX_BODY_SIZE: usize = 64 * 1024;
+/// Maximum request body size: 128 KiB (proof envelopes are ~65 KiB hex-encoded).
+const MAX_BODY_SIZE: usize = 128 * 1024;
 
 /// Run the ESCANORR RPC server on the given address.
 pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
-    let state: AppState = Arc::new(RwLock::new(NodeState::new()));
+    info!("Initializing verifier parameters (IPA setup)...");
+    let verifier = VerifierParams::setup();
+    info!("Verifier parameters ready.");
+
+    let state: AppState = Arc::new(SharedState {
+        node: RwLock::new(NodeState::new()),
+        verifier,
+    });
 
     let app = Router::new()
         .route("/health", get(routes::health))

@@ -836,6 +836,7 @@ dependencies = [
  "escanorr-node",
  "escanorr-primitives",
  "escanorr-sdk",
+ "escanorr-verifier",
  "ff",
  "hex",
  "pasta_curves",
