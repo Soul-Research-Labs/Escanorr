@@ -710,6 +710,7 @@ dependencies = [
  "escanorr-primitives",
  "escanorr-tree",
  "ff",
+ "hex",
  "pasta_curves",
  "rand 0.8.5",
  "serde",

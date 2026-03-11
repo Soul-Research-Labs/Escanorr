@@ -1,7 +1,8 @@
-//! Wallet — key management, note tracking, and coin selection.
+//! Wallet — key management, note tracking, coin selection, and encrypted persistence.
 
 use escanorr_note::{SpendingKey, FullViewingKey, Note, NoteCommitment};
 use escanorr_primitives::Base;
+use ff::PrimeField;
 use thiserror::Error;
 
 /// Wallet errors.
@@ -13,6 +14,12 @@ pub enum WalletError {
     NoKey,
     #[error("mnemonic error: {0}")]
     Mnemonic(String),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("serialization error: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error("decryption failed (wrong password or corrupted file)")]
+    Decryption,
 }
 
 /// A note owned by this wallet, with its position in the Merkle tree.
@@ -149,6 +156,166 @@ impl Default for Wallet {
     }
 }
 
+// ── Encrypted persistence ───────────────────────────────────────────────────
+
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
+use argon2::Argon2;
+use serde::{Serialize, Deserialize};
+use std::path::Path;
+
+/// On-disk format: salt + nonce + ciphertext, all JSON-wrapped for simplicity.
+#[derive(Serialize, Deserialize)]
+struct EncryptedWallet {
+    /// Argon2 salt (16 bytes, hex-encoded).
+    salt: String,
+    /// AES-GCM nonce (12 bytes, hex-encoded).
+    nonce: String,
+    /// AES-GCM ciphertext (hex-encoded).
+    ciphertext: String,
+}
+
+/// Plaintext wallet state — what gets encrypted.
+#[derive(Serialize, Deserialize)]
+struct WalletData {
+    /// Spending key scalar bytes (hex).
+    spending_key: String,
+    /// Owned notes.
+    notes: Vec<OwnedNoteData>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct OwnedNoteData {
+    note: escanorr_note::Note,
+    tree_index: u64,
+    spent: bool,
+}
+
+/// Derive a 32-byte AES key from a password and salt using Argon2id.
+fn derive_key(password: &[u8], salt: &[u8]) -> [u8; 32] {
+    let mut key = [0u8; 32];
+    Argon2::default()
+        .hash_password_into(password, salt, &mut key)
+        .expect("argon2 key derivation");
+    key
+}
+
+impl Wallet {
+    /// Save the wallet to an encrypted file.
+    ///
+    /// The spending key and all notes are serialized to JSON, then encrypted
+    /// with AES-256-GCM. The encryption key is derived from `password` using
+    /// Argon2id with a random salt.
+    pub fn save(&self, path: &Path, password: &[u8]) -> Result<(), WalletError> {
+        let sk = self.spending_key.as_ref().ok_or(WalletError::NoKey)?;
+
+        let data = WalletData {
+            spending_key: hex::encode(sk.inner().to_repr()),
+            notes: self
+                .notes
+                .iter()
+                .map(|n| OwnedNoteData {
+                    note: n.note.clone(),
+                    tree_index: n.tree_index,
+                    spent: n.spent,
+                })
+                .collect(),
+        };
+
+        let plaintext = serde_json::to_vec(&data)?;
+
+        // Generate random salt and nonce
+        let mut salt = [0u8; 16];
+        let mut nonce_bytes = [0u8; 12];
+        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut salt);
+        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut nonce_bytes);
+
+        let key = derive_key(password, &salt);
+        let cipher = Aes256Gcm::new_from_slice(&key).expect("valid key size");
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let ciphertext = cipher
+            .encrypt(nonce, plaintext.as_ref())
+            .map_err(|_| WalletError::Decryption)?;
+
+        let encrypted = EncryptedWallet {
+            salt: hex::encode(salt),
+            nonce: hex::encode(nonce_bytes),
+            ciphertext: hex::encode(ciphertext),
+        };
+
+        let json = serde_json::to_vec_pretty(&encrypted)?;
+
+        // Write atomically via temp file
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, &json)?;
+        std::fs::rename(&tmp, path)?;
+
+        Ok(())
+    }
+
+    /// Load a wallet from an encrypted file.
+    pub fn load(path: &Path, password: &[u8]) -> Result<Self, WalletError> {
+        let json = std::fs::read(path)?;
+        let encrypted: EncryptedWallet = serde_json::from_slice(&json)?;
+
+        let salt = hex::decode(&encrypted.salt).map_err(|_| WalletError::Decryption)?;
+        let nonce_bytes = hex::decode(&encrypted.nonce).map_err(|_| WalletError::Decryption)?;
+        let ciphertext = hex::decode(&encrypted.ciphertext).map_err(|_| WalletError::Decryption)?;
+
+        if nonce_bytes.len() != 12 {
+            return Err(WalletError::Decryption);
+        }
+
+        let key = derive_key(password, &salt);
+        let cipher = Aes256Gcm::new_from_slice(&key).expect("valid key size");
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext.as_ref())
+            .map_err(|_| WalletError::Decryption)?;
+
+        let data: WalletData = serde_json::from_slice(&plaintext)?;
+
+        // Reconstruct spending key from hex
+        let sk_bytes = hex::decode(&data.spending_key).map_err(|_| WalletError::Decryption)?;
+        let arr: [u8; 32] = sk_bytes
+            .try_into()
+            .map_err(|_| WalletError::Decryption)?;
+        let scalar = pasta_curves::pallas::Scalar::from_repr(arr);
+        if bool::from(scalar.is_none()) {
+            return Err(WalletError::Decryption);
+        }
+        let sk = SpendingKey::from_scalar(scalar.unwrap());
+        let fvk = sk.to_full_viewing_key();
+
+        let notes = data
+            .notes
+            .into_iter()
+            .map(|nd| {
+                let commitment = nd.note.commitment();
+                OwnedNote {
+                    note: nd.note,
+                    commitment,
+                    tree_index: nd.tree_index,
+                    spent: nd.spent,
+                }
+            })
+            .collect();
+
+        Ok(Self {
+            spending_key: Some(sk),
+            fvk: Some(fvk),
+            notes,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +365,39 @@ mod tests {
         assert_eq!(wallet.balance(), 300);
         wallet.mark_spent(0);
         assert_eq!(wallet.balance(), 200);
+    }
+
+    #[test]
+    fn wallet_save_load_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wallet.enc");
+        let password = b"test-password-123";
+
+        let mut wallet = Wallet::random();
+        wallet.add_note(make_note(100), 0);
+        wallet.add_note(make_note(200), 1);
+        wallet.mark_spent(0);
+
+        let original_owner = wallet.owner().unwrap();
+        let original_balance = wallet.balance();
+
+        wallet.save(&path, password).unwrap();
+
+        let loaded = Wallet::load(&path, password).unwrap();
+        assert_eq!(loaded.owner().unwrap(), original_owner);
+        assert_eq!(loaded.balance(), original_balance);
+        assert_eq!(loaded.unspent_notes().len(), 1);
+    }
+
+    #[test]
+    fn wallet_load_wrong_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wallet.enc");
+
+        let wallet = Wallet::random();
+        wallet.save(&path, b"correct").unwrap();
+
+        let result = Wallet::load(&path, b"wrong");
+        assert!(matches!(result, Err(WalletError::Decryption)));
     }
 }
