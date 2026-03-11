@@ -3,6 +3,7 @@
 use crate::nullifier_set::NullifierSet;
 use escanorr_primitives::Base;
 use escanorr_tree::IncrementalMerkleTree;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Errors from the privacy pool.
@@ -52,6 +53,7 @@ pub struct TransferRequest {
 }
 
 /// The privacy pool state machine.
+#[derive(Serialize, Deserialize)]
 pub struct PrivacyPool {
     tree: IncrementalMerkleTree,
     nullifiers: NullifierSet,

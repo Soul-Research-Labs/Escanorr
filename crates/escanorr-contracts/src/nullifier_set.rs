@@ -1,10 +1,11 @@
 //! Nullifier set — efficient double-spend detection.
 
 use escanorr_primitives::Base;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// A set tracking spent nullifiers to prevent double-spending.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NullifierSet {
     /// Backed by a HashSet of 32-byte representations.
     nullifiers: HashSet<[u8; 32]>,

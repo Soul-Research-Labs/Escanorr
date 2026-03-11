@@ -45,6 +45,7 @@ pub struct TxRecord {
 }
 
 /// The node's in-memory state.
+#[derive(Serialize, Deserialize)]
 pub struct NodeState {
     pool: PrivacyPool,
     /// Recent transaction history (bounded).

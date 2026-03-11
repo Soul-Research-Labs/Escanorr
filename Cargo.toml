@@ -56,6 +56,9 @@ hex = "0.4"
 bincode = "1"
 base64 = "0.22"
 
+# Storage
+sled = "0.34"
+
 # Async
 tokio = { version = "1", features = ["full"] }
 
