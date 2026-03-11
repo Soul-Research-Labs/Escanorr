@@ -59,6 +59,9 @@ base64 = "0.22"
 # Async
 tokio = { version = "1", features = ["full"] }
 
+# Concurrency
+dashmap = "6"
+
 # HTTP
 axum = "0.8"
 tower = "0.5"

@@ -1,8 +1,10 @@
 //! Axum server setup and configuration.
 
+use crate::rate_limit::{RateLimitConfig, RateLimiter, rate_limit_middleware};
 use crate::routes::{self, SharedState, AppState};
 use axum::{
     extract::DefaultBodyLimit,
+    middleware,
     routing::{get, post},
     Router,
 };
@@ -10,6 +12,7 @@ use escanorr_node::NodeState;
 use escanorr_verifier::VerifierParams;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use tracing::info;
@@ -29,6 +32,11 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         verifier,
     });
 
+    let limiter = RateLimiter::new(RateLimitConfig {
+        max_requests: 60,
+        window: Duration::from_secs(60),
+    });
+
     let app = Router::new()
         .route("/health", get(routes::health))
         .route("/root", get(routes::get_root))
@@ -39,14 +47,18 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         .route("/nullifier/{nf}", get(routes::get_nullifier))
         .route("/bridge/lock", post(routes::post_bridge_lock))
         .route("/bridge/status/{nf}", get(routes::get_bridge_status))
+        .layer(middleware::from_fn_with_state(limiter, rate_limit_middleware))
         .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    info!("ESCANORR RPC server listening on {}", addr);
+    info!("ESCANORR RPC server listening on {} (rate limit: 60 req/min per IP)", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    ).await?;
 
     Ok(())
 }

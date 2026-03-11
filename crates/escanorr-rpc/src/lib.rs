@@ -13,5 +13,6 @@
 
 mod server;
 mod routes;
+pub mod rate_limit;
 
 pub use server::run_server;
