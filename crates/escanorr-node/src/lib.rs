@@ -5,4 +5,4 @@
 
 mod state;
 
-pub use state::{NodeState, TxRecord, TxKind};
+pub use state::{NodeState, NodeError, TxRecord, TxKind};

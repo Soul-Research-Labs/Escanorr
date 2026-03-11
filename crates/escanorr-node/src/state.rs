@@ -1,9 +1,32 @@
 //! Node state management — tracks the privacy pool, pending transactions, and history.
+//!
+//! The raw `transfer()` / `withdraw()` methods trust the caller (e.g. SDK after
+//! proof generation). For callers that need defense-in-depth, `verified_*`
+//! methods accept a proof envelope + public inputs and verify before mutation.
 
 use escanorr_contracts::{PrivacyPool, PoolError, DepositRequest, WithdrawRequest, TransferRequest};
-use escanorr_primitives::Base;
+use escanorr_primitives::{Base, ProofEnvelope};
+use escanorr_verifier::{VerifierParams, verify_transfer, verify_withdraw, verify_bridge};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+
+/// Errors from verified node operations.
+#[derive(Debug)]
+pub enum NodeError {
+    Pool(PoolError),
+    InvalidProof,
+}
+
+impl std::fmt::Display for NodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NodeError::Pool(e) => write!(f, "pool error: {e}"),
+            NodeError::InvalidProof => write!(f, "invalid proof"),
+        }
+    }
+}
+
+impl std::error::Error for NodeError {}
 
 /// The kind of transaction processed by the node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +126,75 @@ impl NodeState {
     /// Get transaction history.
     pub fn history(&self) -> &VecDeque<TxRecord> {
         &self.history
+    }
+
+    // ─── Verified (proof-checked) methods ───────────────────────
+
+    /// Transfer with proof verification (defense-in-depth).
+    ///
+    /// `public_inputs` layout: `[root, nf_0, nf_1, out_cm_0, out_cm_1]`
+    pub fn verified_transfer(
+        &mut self,
+        nullifiers: Vec<Base>,
+        merkle_root: Base,
+        output_commitments: Vec<Base>,
+        envelope: &ProofEnvelope,
+        verifier: &VerifierParams,
+    ) -> Result<(), NodeError> {
+        let mut pi = vec![merkle_root];
+        pi.extend_from_slice(&nullifiers);
+        pi.extend_from_slice(&output_commitments);
+        verify_transfer(verifier, envelope, &[&pi])
+            .map_err(|_| NodeError::InvalidProof)?;
+        self.transfer(nullifiers, merkle_root, output_commitments)
+            .map_err(NodeError::Pool)
+    }
+
+    /// Withdraw with proof verification (defense-in-depth).
+    ///
+    /// `public_inputs` layout: `[root, nullifier, change_cm, exit_value]`
+    pub fn verified_withdraw(
+        &mut self,
+        nullifier: Base,
+        merkle_root: Base,
+        exit_value: u64,
+        change_commitment: Option<Base>,
+        envelope: &ProofEnvelope,
+        verifier: &VerifierParams,
+    ) -> Result<(), NodeError> {
+        let chg_cm = change_commitment.unwrap_or(Base::from(0u64));
+        let pi = vec![merkle_root, nullifier, chg_cm, Base::from(exit_value)];
+        verify_withdraw(verifier, envelope, &[&pi])
+            .map_err(|_| NodeError::InvalidProof)?;
+        self.withdraw(nullifier, merkle_root, exit_value, change_commitment)
+            .map_err(NodeError::Pool)
+    }
+
+    /// Bridge lock with proof verification (defense-in-depth).
+    ///
+    /// `public_inputs` layout: `[src_root, src_nullifier, dest_cm, src_chain_id, dest_chain_id]`
+    pub fn verified_bridge_lock(
+        &mut self,
+        nullifier: Base,
+        merkle_root: Base,
+        dest_commitment: Base,
+        src_chain_id: u64,
+        dest_chain_id: u64,
+        envelope: &ProofEnvelope,
+        verifier: &VerifierParams,
+    ) -> Result<(), NodeError> {
+        let pi = vec![
+            merkle_root,
+            nullifier,
+            dest_commitment,
+            Base::from(src_chain_id),
+            Base::from(dest_chain_id),
+        ];
+        verify_bridge(verifier, envelope, &[&pi])
+            .map_err(|_| NodeError::InvalidProof)?;
+        // Source chain: nullify the note
+        self.withdraw(nullifier, merkle_root, 0, None)
+            .map_err(NodeError::Pool)
     }
 
     fn record(&mut self, kind: TxKind) {
