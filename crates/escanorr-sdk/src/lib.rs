@@ -5,4 +5,6 @@
 
 mod orchestrator;
 
-pub use orchestrator::{Escanorr, SdkError};
+pub use orchestrator::{
+    Escanorr, SdkError, TransferResult, WithdrawResult, BridgeResult,
+};

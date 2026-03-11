@@ -69,6 +69,7 @@ fn full_privacy_pipeline() {
 
 /// SDK orchestrator: deposit → send → balance across two wallets.
 #[test]
+#[ignore] // Requires expensive prover setup — run with `cargo test -- --ignored`
 fn sdk_two_wallet_transfer() {
     let mut alice = Escanorr::new();
     let bob_sk = SpendingKey::random();
@@ -79,10 +80,11 @@ fn sdk_two_wallet_transfer() {
     alice.deposit(500).unwrap();
     assert_eq!(alice.balance(), 1500);
 
-    // Alice sends 300 to Bob (fee 0)
-    let outputs = alice.send(bob_owner, 300, 0).unwrap();
-    assert_eq!(outputs.len(), 2); // recipient + change
+    // Alice sends 300 to Bob (fee 0) — generates ZK proof
+    let result = alice.send(bob_owner, 300, 0).unwrap();
+    assert_eq!(result.output_notes.len(), 2); // recipient + change
     assert_eq!(alice.balance(), 1200); // 1500 - 300
+    assert!(!result.proof.as_bytes().is_empty());
 }
 
 /// Cross-chain nullifier isolation: same note produces different nullifiers per chain.

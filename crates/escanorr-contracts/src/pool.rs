@@ -85,6 +85,12 @@ impl PrivacyPool {
         self.tree.size()
     }
 
+    /// Get the Merkle authentication path for a leaf at `index`.
+    /// Returns `(siblings, path_indices)` or `None` if index is out of range.
+    pub fn auth_path(&self, index: u64) -> Option<(Vec<Base>, Vec<u8>)> {
+        self.tree.auth_path(index)
+    }
+
     /// Process a deposit: insert commitment into the Merkle tree.
     pub fn deposit(&mut self, req: DepositRequest) -> Result<u64, PoolError> {
         let index = self.tree.insert(req.commitment);
