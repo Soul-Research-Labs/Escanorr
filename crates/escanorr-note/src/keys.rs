@@ -37,7 +37,8 @@ impl SpendingKey {
         bytes.copy_from_slice(&hash);
         // Clear top bits to ensure value is in the scalar field
         bytes[31] &= 0x0f;
-        let scalar = pallas::Scalar::from_repr(bytes).unwrap_or(pallas::Scalar::one());
+        let scalar = pallas::Scalar::from_repr(bytes)
+            .expect("seed hash with cleared top bits must be valid scalar");
         SpendingKey(scalar)
     }
 
@@ -47,10 +48,17 @@ impl SpendingKey {
     }
 
     /// Convert spending key to a base field element for nullifier derivation.
+    ///
+    /// # Panics
+    /// If the scalar representation exceeds the Pallas base modulus (extremely
+    /// unlikely in practice since both fields have similar size).
     pub fn to_base(&self) -> pallas::Base {
         let bytes = self.0.to_repr();
-        // Reinterpret scalar bytes as a base field element
-        pallas::Base::from_repr(bytes).unwrap_or(pallas::Base::zero())
+        // Reinterpret scalar bytes as a base field element.
+        // Pallas scalar and base fields have similar moduli, so this
+        // succeeds for all but a negligible fraction of scalars.
+        pallas::Base::from_repr(bytes)
+            .expect("spending key scalar must be representable as base field element")
     }
 
     /// Derive the corresponding viewing key (public key).

@@ -47,7 +47,7 @@ fn domain_to_field(domain: &[u8]) -> pallas::Base {
     bytes.copy_from_slice(&hash);
     // Clear the top two bits so the value is < 2^254 < p (Pallas modulus)
     bytes[31] &= 0x3f;
-    pallas::Base::from_repr(bytes).unwrap_or(pallas::Base::zero())
+    pallas::Base::from_repr(bytes).expect("domain hash with cleared top bits must be valid field element")
 }
 
 /// Hash a single field element (used for leaf hashing in Merkle trees).
