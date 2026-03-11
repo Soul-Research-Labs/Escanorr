@@ -164,7 +164,10 @@ export class EscanorrClient {
         if (!resp.ok) {
           const err = new HttpError(resp.status, text);
           // Only retry on 5xx or 429 (rate limited)
-          if ((resp.status >= 500 || resp.status === 429) && attempt < this.retries) {
+          if (
+            (resp.status >= 500 || resp.status === 429) &&
+            attempt < this.retries
+          ) {
             lastError = err;
             continue;
           }
@@ -184,6 +187,9 @@ export class EscanorrClient {
     }
 
     // Should not reach here, but satisfy TypeScript
-    throw new NetworkError(`Request to ${method} ${path} failed after ${this.retries} retries`, lastError);
+    throw new NetworkError(
+      `Request to ${method} ${path} failed after ${this.retries} retries`,
+      lastError,
+    );
   }
 }

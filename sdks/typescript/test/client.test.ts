@@ -293,9 +293,7 @@ describe("retry logic", () => {
       }
     });
 
-    await new Promise<void>((resolve) =>
-      srv.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
     const addr = srv.address();
     const port = typeof addr === "object" ? addr!.port : 0;
     const client = new EscanorrClient({
@@ -315,9 +313,7 @@ describe("retry logic", () => {
       jsonResponse(res, 500, { error: "down" });
     });
 
-    await new Promise<void>((resolve) =>
-      srv.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
     const addr = srv.address();
     const port = typeof addr === "object" ? addr!.port : 0;
     const client = new EscanorrClient({
@@ -337,9 +333,7 @@ describe("retry logic", () => {
       jsonResponse(res, 404, { error: "not found" });
     });
 
-    await new Promise<void>((resolve) =>
-      srv.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
     const addr = srv.address();
     const port = typeof addr === "object" ? addr!.port : 0;
     const client = new EscanorrClient({
@@ -356,9 +350,7 @@ describe("retry logic", () => {
   it("retries on network error then succeeds", async () => {
     // Start a server, get port, close it, then restart on same port after a delay
     const srv1 = createServer(() => {});
-    await new Promise<void>((resolve) =>
-      srv1.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => srv1.listen(0, "127.0.0.1", resolve));
     const addr1 = srv1.address();
     const port = typeof addr1 === "object" ? addr1!.port : 0;
     srv1.close();
@@ -395,9 +387,7 @@ describe("retry logic", () => {
       }
     });
 
-    await new Promise<void>((resolve) =>
-      srv.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
     const addr = srv.address();
     const port = typeof addr === "object" ? addr!.port : 0;
     const client = new EscanorrClient({
@@ -419,9 +409,7 @@ describe("retry logic", () => {
       jsonResponse(res, 500, { error: "down" });
     });
 
-    await new Promise<void>((resolve) =>
-      srv.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
     const addr = srv.address();
     const port = typeof addr === "object" ? addr!.port : 0;
     const client = new EscanorrClient({

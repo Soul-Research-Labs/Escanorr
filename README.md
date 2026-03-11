@@ -177,8 +177,8 @@ import { EscanorrClient, ChainId } from "@escanorr/sdk";
 
 const client = new EscanorrClient({
   baseUrl: "http://localhost:3030",
-  retries: 3,        // retry on 5xx / network errors
-  retryBaseMs: 500,  // exponential backoff starting at 500ms
+  retries: 3, // retry on 5xx / network errors
+  retryBaseMs: 500, // exponential backoff starting at 500ms
 });
 
 const health = await client.health();
