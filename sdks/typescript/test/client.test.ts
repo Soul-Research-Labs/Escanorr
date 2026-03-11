@@ -281,6 +281,161 @@ describe("EscanorrClient", () => {
   });
 });
 
+describe("retry logic", () => {
+  it("retries on 500 then succeeds", async () => {
+    let attempt = 0;
+    const srv = createServer((req, res) => {
+      attempt++;
+      if (attempt < 3) {
+        jsonResponse(res, 500, { error: "internal" });
+      } else {
+        jsonResponse(res, 200, { status: "ok", uptime: 1 });
+      }
+    });
+
+    await new Promise<void>((resolve) =>
+      srv.listen(0, "127.0.0.1", resolve),
+    );
+    const addr = srv.address();
+    const port = typeof addr === "object" ? addr!.port : 0;
+    const client = new EscanorrClient({
+      baseUrl: `http://127.0.0.1:${port}`,
+      retries: 3,
+      retryBaseMs: 10,
+    });
+
+    const resp = await client.health();
+    expect(resp.status).toBe("ok");
+    expect(attempt).toBe(3);
+    srv.close();
+  });
+
+  it("gives up after max retries on 500", async () => {
+    const srv = createServer((req, res) => {
+      jsonResponse(res, 500, { error: "down" });
+    });
+
+    await new Promise<void>((resolve) =>
+      srv.listen(0, "127.0.0.1", resolve),
+    );
+    const addr = srv.address();
+    const port = typeof addr === "object" ? addr!.port : 0;
+    const client = new EscanorrClient({
+      baseUrl: `http://127.0.0.1:${port}`,
+      retries: 2,
+      retryBaseMs: 10,
+    });
+
+    await expect(client.health()).rejects.toThrow(HttpError);
+    srv.close();
+  });
+
+  it("does not retry on 404", async () => {
+    let attempt = 0;
+    const srv = createServer((req, res) => {
+      attempt++;
+      jsonResponse(res, 404, { error: "not found" });
+    });
+
+    await new Promise<void>((resolve) =>
+      srv.listen(0, "127.0.0.1", resolve),
+    );
+    const addr = srv.address();
+    const port = typeof addr === "object" ? addr!.port : 0;
+    const client = new EscanorrClient({
+      baseUrl: `http://127.0.0.1:${port}`,
+      retries: 3,
+      retryBaseMs: 10,
+    });
+
+    await expect(client.health()).rejects.toThrow(HttpError);
+    expect(attempt).toBe(1);
+    srv.close();
+  });
+
+  it("retries on network error then succeeds", async () => {
+    // Start a server, get port, close it, then restart on same port after a delay
+    const srv1 = createServer(() => {});
+    await new Promise<void>((resolve) =>
+      srv1.listen(0, "127.0.0.1", resolve),
+    );
+    const addr1 = srv1.address();
+    const port = typeof addr1 === "object" ? addr1!.port : 0;
+    srv1.close();
+
+    // Client will fail first attempt (connection refused), then server restarts
+    const srv2 = createServer((req, res) => {
+      jsonResponse(res, 200, { status: "ok", uptime: 99 });
+    });
+
+    const client = new EscanorrClient({
+      baseUrl: `http://127.0.0.1:${port}`,
+      retries: 5,
+      retryBaseMs: 50,
+    });
+
+    // Start server after a short delay so first attempt(s) fail
+    setTimeout(() => {
+      srv2.listen(port, "127.0.0.1");
+    }, 80);
+
+    const resp = await client.health();
+    expect(resp.status).toBe("ok");
+    srv2.close();
+  });
+
+  it("retries on 429 rate limited", async () => {
+    let attempt = 0;
+    const srv = createServer((req, res) => {
+      attempt++;
+      if (attempt === 1) {
+        jsonResponse(res, 429, { error: "rate limited" });
+      } else {
+        jsonResponse(res, 200, { status: "ok", uptime: 7 });
+      }
+    });
+
+    await new Promise<void>((resolve) =>
+      srv.listen(0, "127.0.0.1", resolve),
+    );
+    const addr = srv.address();
+    const port = typeof addr === "object" ? addr!.port : 0;
+    const client = new EscanorrClient({
+      baseUrl: `http://127.0.0.1:${port}`,
+      retries: 2,
+      retryBaseMs: 10,
+    });
+
+    const resp = await client.health();
+    expect(resp.status).toBe("ok");
+    expect(attempt).toBe(2);
+    srv.close();
+  });
+
+  it("no retries when retries=0", async () => {
+    let attempt = 0;
+    const srv = createServer((req, res) => {
+      attempt++;
+      jsonResponse(res, 500, { error: "down" });
+    });
+
+    await new Promise<void>((resolve) =>
+      srv.listen(0, "127.0.0.1", resolve),
+    );
+    const addr = srv.address();
+    const port = typeof addr === "object" ? addr!.port : 0;
+    const client = new EscanorrClient({
+      baseUrl: `http://127.0.0.1:${port}`,
+      retries: 0,
+      retryBaseMs: 10,
+    });
+
+    await expect(client.health()).rejects.toThrow(HttpError);
+    expect(attempt).toBe(1);
+    srv.close();
+  });
+});
+
 describe("ChainId enum", () => {
   it("has all expected chains", () => {
     expect(ChainId.Zcash).toBe("zcash");

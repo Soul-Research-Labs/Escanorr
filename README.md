@@ -63,7 +63,7 @@ No production-grade Zcash ↔ EVM bridge exists. Zcash's privacy is single-chain
 │         │                                                         │
 │  ┌──────▼─────────────────────────────────────────────────────┐  │
 │  │                  escanorr-circuits                          │  │
-│  │  TransferCircuit (k=13) · WithdrawCircuit · BridgeCircuit  │  │
+│  │  TransferCircuit (k=17) · WithdrawCircuit · BridgeCircuit  │  │
 │  └──────┬─────────────────┬──────────────────┬───────────────┘   │
 │         │                 │                   │                    │
 │  ┌──────▼─────┐  ┌───────▼──────┐  ┌────────▼───────────────┐   │
@@ -90,11 +90,11 @@ No production-grade Zcash ↔ EVM bridge exists. Zcash's privacy is single-chain
 | **escanorr-verifier**   | Proof verification with Halo2 IPA backend                                                                                       |
 | **escanorr-contracts**  | Privacy pool state machine — deposits, withdrawals, transfers, epoch/nullifier tracking                                         |
 | **escanorr-node**       | Prover daemon state coordinator — transaction recording, pool management                                                        |
-| **escanorr-client**     | Wallet with BIP39 key derivation, note tracking, greedy coin selection                                                          |
+| **escanorr-client**     | Wallet with BIP39 key derivation, note tracking, greedy coin selection, AES-256-GCM encrypted persistence                       |
 | **escanorr-bridge**     | Cross-chain adapter trait with chain support: Zcash, Horizen, Komodo, Pirate Chain, Ethereum, Polygon, Arbitrum, Optimism, Base |
 | **escanorr-sdk**        | High-level orchestrator — deposit, send, balance operations                                                                     |
-| **escanorr-rpc**        | Axum HTTP server with health, info, deposit, and transfer endpoints                                                             |
-| **escanorr-cli**        | CLI binary — serve, keygen, info, deposit, balance subcommands                                                                  |
+| **escanorr-rpc**        | Axum HTTP server with health, info, deposit, transfer endpoints, per-IP rate limiting, structured tracing                       |
+| **escanorr-cli**        | CLI binary — serve, init, info, deposit, balance, withdraw, transfer, bridge subcommands with encrypted wallet                  |
 
 ---
 
@@ -130,26 +130,60 @@ cargo test -p escanorr-circuits
 ### Start the RPC Server
 
 ```bash
-cargo run --release --bin escanorr-cli -- serve --port 3000
+cargo run --release --bin escanorr-cli -- serve --addr 127.0.0.1:3030
 ```
 
-### Generate Keys
+### Create a Wallet
 
 ```bash
-cargo run --release --bin escanorr-cli -- keygen
+# Creates an encrypted wallet at ~/.escanorr/wallet.enc
+cargo run --release --bin escanorr-cli -- init
 ```
 
 ### CLI Usage
 
 ```bash
-# Check node info
-cargo run --release --bin escanorr-cli -- info --host http://localhost:3000
+# Show wallet info (spending/viewing keys)
+cargo run --release --bin escanorr-cli -- info
 
-# Deposit
-cargo run --release --bin escanorr-cli -- deposit --host http://localhost:3000 --amount 100
+# Deposit into privacy pool
+cargo run --release --bin escanorr-cli -- deposit --value 100
 
 # Check balance
-cargo run --release --bin escanorr-cli -- balance --mnemonic "your twelve word mnemonic phrase goes here"
+cargo run --release --bin escanorr-cli -- balance
+
+# Private transfer (recipient is a 64-char hex public key)
+cargo run --release --bin escanorr-cli -- transfer --recipient <hex> --value 50
+
+# Withdraw with ZK proof
+cargo run --release --bin escanorr-cli -- withdraw --value 25 --fee 1
+
+# Cross-chain bridge
+cargo run --release --bin escanorr-cli -- bridge --dest-chain-id 137
+```
+
+---
+
+### TypeScript SDK
+
+```bash
+cd sdks/typescript
+npm install
+npm test
+```
+
+```typescript
+import { EscanorrClient, ChainId } from "@escanorr/sdk";
+
+const client = new EscanorrClient({
+  baseUrl: "http://localhost:3030",
+  retries: 3,        // retry on 5xx / network errors
+  retryBaseMs: 500,  // exponential backoff starting at 500ms
+});
+
+const health = await client.health();
+const info = await client.info();
+const deposit = await client.deposit({ owner: "0x...", value: 1000 });
 ```
 
 ---
@@ -252,7 +286,7 @@ Before deploying with real funds, complete every item below:
 - [ ] **Recursive proof wrapping** — Complete the `snark-verifier` integration in `EvmAdapter::submit()` (currently returns `EvmWrappingNotImplemented`)
 - [ ] **On-chain Merkle tree depth** — Verify the depth-32 IncrementalMerkleTree gas profile meets target chain block limits
 - [ ] **Key management** — Hardware-backed key storage for relayer signing keys and contract admin keys
-- [ ] **Rate limiting** — Deploy per-IP rate limiting (the RPC server has a 64 KiB body limit but no rate limiter)
+- [x] **Rate limiting** — Per-IP sliding-window rate limiter (60 req/min) deployed on the RPC server (128 KiB body limit)
 - [ ] **Monitoring** — Prometheus metrics export with alerting on nullifier-set growth, pool balance, and proof generation latency
 - [ ] **Incident response** — Emergency pause procedures tested; owner multisig deployed
 - [ ] **Fuzz testing** — Run `cargo fuzz` targets for extended duration (current CI only compile-checks)

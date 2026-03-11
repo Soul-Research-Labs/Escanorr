@@ -23,6 +23,10 @@ export interface EscanorrClientConfig {
   apiKey?: string;
   /** Request timeout in milliseconds (default: 30_000) */
   timeoutMs?: number;
+  /** Number of retry attempts for transient failures (default: 3) */
+  retries?: number;
+  /** Initial backoff delay in ms, doubled each attempt (default: 500) */
+  retryBaseMs?: number;
 }
 
 /**
@@ -39,12 +43,16 @@ export class EscanorrClient {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly timeoutMs: number;
+  private readonly retries: number;
+  private readonly retryBaseMs: number;
 
   constructor(config: EscanorrClientConfig) {
     // Strip trailing slash
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.apiKey = config.apiKey;
     this.timeoutMs = config.timeoutMs ?? 30_000;
+    this.retries = config.retries ?? 3;
+    this.retryBaseMs = config.retryBaseMs ?? 500;
   }
 
   // ──────────────────────────────────────────────────────────
@@ -132,29 +140,50 @@ export class EscanorrClient {
       headers["X-API-Key"] = this.apiKey;
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let lastError: unknown;
 
-    try {
-      const resp = await fetch(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-
-      const text = await resp.text();
-
-      if (!resp.ok) {
-        throw new HttpError(resp.status, text);
+    for (let attempt = 0; attempt <= this.retries; attempt++) {
+      if (attempt > 0) {
+        const delay = this.retryBaseMs * 2 ** (attempt - 1);
+        await new Promise((r) => setTimeout(r, delay));
       }
 
-      return JSON.parse(text) as T;
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new NetworkError(`Request to ${method} ${path} failed`, err);
-    } finally {
-      clearTimeout(timer);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      try {
+        const resp = await fetch(url, {
+          method,
+          headers,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+        });
+
+        const text = await resp.text();
+
+        if (!resp.ok) {
+          const err = new HttpError(resp.status, text);
+          // Only retry on 5xx or 429 (rate limited)
+          if ((resp.status >= 500 || resp.status === 429) && attempt < this.retries) {
+            lastError = err;
+            continue;
+          }
+          throw err;
+        }
+
+        return JSON.parse(text) as T;
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        lastError = err;
+        // Retry on network-level errors
+        if (attempt < this.retries) continue;
+        throw new NetworkError(`Request to ${method} ${path} failed`, err);
+      } finally {
+        clearTimeout(timer);
+      }
     }
+
+    // Should not reach here, but satisfy TypeScript
+    throw new NetworkError(`Request to ${method} ${path} failed after ${this.retries} retries`, lastError);
   }
 }
