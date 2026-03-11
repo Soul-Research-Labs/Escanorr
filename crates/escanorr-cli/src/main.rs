@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use escanorr_sdk::Escanorr;
+use ff::PrimeField;
 use std::net::SocketAddr;
 
 #[derive(Parser)]
@@ -35,30 +36,49 @@ enum Commands {
     },
     /// Show current balance (local demo).
     Balance,
-    /// Withdraw funds from the privacy pool (local demo).
+    /// Withdraw funds from the privacy pool with ZK proof.
     Withdraw {
         /// Value to withdraw.
         #[arg(short, long)]
         value: u64,
+        /// Fee for the withdrawal.
+        #[arg(short, long, default_value = "0")]
+        fee: u64,
     },
-    /// Private transfer to another user (local demo).
+    /// Private transfer to another user with ZK proof.
     Transfer {
-        /// Recipient public key (hex).
+        /// Recipient public key (hex, 64 chars).
         #[arg(short, long)]
         recipient: String,
         /// Value to transfer.
         #[arg(short, long)]
         value: u64,
+        /// Fee for the transfer.
+        #[arg(short, long, default_value = "0")]
+        fee: u64,
     },
-    /// Initiate a cross-chain bridge operation (local demo).
+    /// Initiate a cross-chain bridge with ZK proof.
     Bridge {
-        /// Destination chain (e.g. ethereum, polygon, horizen).
-        #[arg(short, long)]
-        dest: String,
-        /// Value to bridge.
-        #[arg(short, long)]
-        value: u64,
+        /// Destination chain ID (numeric).
+        #[arg(long)]
+        dest_chain_id: u64,
+        /// Source chain ID (numeric).
+        #[arg(long, default_value = "1")]
+        src_chain_id: u64,
+        /// Fee for the bridge.
+        #[arg(short, long, default_value = "0")]
+        fee: u64,
     },
+}
+
+fn hex_to_base(s: &str) -> Result<escanorr_primitives::Base, String> {
+    if s.len() != 64 {
+        return Err(format!("expected 64 hex chars, got {}", s.len()));
+    }
+    let bytes = hex::decode(s).map_err(|e| format!("invalid hex: {e}"))?;
+    let arr: [u8; 32] = bytes.try_into().map_err(|_| "invalid length")?;
+    Option::from(escanorr_primitives::Base::from_repr(arr))
+        .ok_or_else(|| "invalid field element".to_string())
 }
 
 #[tokio::main]
@@ -95,35 +115,54 @@ async fn main() {
             let esc = Escanorr::new();
             println!("Balance: {}", esc.balance());
         }
-        Commands::Withdraw { value } => {
+        Commands::Withdraw { value, fee } => {
             let mut esc = Escanorr::new();
-            // Deposit first to have something to withdraw from in demo mode
-            let _ = esc.deposit(value).expect("deposit for withdraw failed");
-            let root = esc.root();
-            let owner = esc.wallet().owner().expect("wallet has key");
-            // Use the owner key as a deterministic nullifier for the demo
-            println!("Withdrawing {} from the privacy pool...", value);
-            println!("Merkle root: {}", hex::encode(root.to_repr()));
-            println!("Owner: {}", hex::encode(owner.to_repr()));
-            println!("Withdrawal of {} complete (demo mode).", value);
+            // In demo mode, deposit first so we have funds to withdraw
+            esc.deposit(value + fee).expect("deposit failed");
+
+            println!("Initializing prover (one-time IPA setup)...");
+            let result = esc.withdraw(value, fee).expect("withdraw failed");
+            println!("Withdrawal complete!");
+            println!("  Exit value: {}", result.exit_value);
+            if let Some(ref cn) = result.change_note {
+                println!("  Change note: value={}", cn.value);
+            }
+            println!("  Proof size: {} bytes", result.proof.as_bytes().len());
+            println!("  Proof (hex, first 64 chars): {}...", &hex::encode(&result.proof.as_bytes()[..32]));
         }
-        Commands::Transfer { recipient, value } => {
+        Commands::Transfer { recipient, value, fee } => {
+            let recipient_owner = hex_to_base(&recipient).unwrap_or_else(|e| {
+                eprintln!("Invalid recipient: {e}");
+                std::process::exit(1);
+            });
+
             let mut esc = Escanorr::new();
-            let _ = esc.deposit(value).expect("deposit for transfer failed");
-            let root = esc.root();
-            println!("Transferring {} to {}...", value, recipient);
-            println!("Merkle root: {}", hex::encode(root.to_repr()));
-            println!("Transfer of {} complete (demo mode).", value);
+            // In demo mode, deposit first so we have funds
+            esc.deposit(value + fee).expect("deposit failed");
+
+            println!("Initializing prover (one-time IPA setup)...");
+            let result = esc.send(recipient_owner, value, fee).expect("transfer failed");
+            println!("Transfer complete!");
+            println!("  Recipient note: value={}", result.output_notes[0].value);
+            println!("  Change note: value={}", result.output_notes[1].value);
+            println!("  Proof size: {} bytes", result.proof.as_bytes().len());
+            println!("  Proof (hex, first 64 chars): {}...", &hex::encode(&result.proof.as_bytes()[..32]));
         }
-        Commands::Bridge { dest, value } => {
+        Commands::Bridge { dest_chain_id, src_chain_id, fee } => {
             let mut esc = Escanorr::new();
-            let _ = esc.deposit(value).expect("deposit for bridge failed");
-            let root = esc.root();
-            println!("Bridging {} to chain '{}'...", value, dest);
-            println!("Source merkle root: {}", hex::encode(root.to_repr()));
-            println!("Bridge lock of {} to '{}' submitted (demo mode).", value, dest);
+            // In demo mode, deposit first
+            esc.deposit(1000 + fee).expect("deposit failed");
+
+            let dest_owner = esc.wallet().owner().expect("wallet has key");
+
+            println!("Initializing prover (one-time IPA setup)...");
+            let result = esc.bridge(dest_owner, src_chain_id, dest_chain_id, fee)
+                .expect("bridge failed");
+            println!("Bridge lock complete!");
+            println!("  Source chain: {}, Destination chain: {}", src_chain_id, dest_chain_id);
+            println!("  Destination note: value={}", result.dest_note.value);
+            println!("  Proof size: {} bytes", result.proof.as_bytes().len());
+            println!("  Proof (hex, first 64 chars): {}...", &hex::encode(&result.proof.as_bytes()[..32]));
         }
     }
 }
-
-use ff::PrimeField;
