@@ -34,12 +34,11 @@ contract DeployEscanorr is Script {
         );
         console2.log("BridgeVault:", address(vault));
 
-        // 5. Authorize pool to record nullifiers
-        // NOTE: In production, both pool and vault need authorization.
-        // The NullifierRegistry has a single `pool` slot — in production
-        // this should be extended to an access control list.
+        // 5. Authorize pool and vault to record nullifiers
         registry.setPool(address(pool));
-        console2.log("NullifierRegistry pool set to PrivacyPool");
+        registry.authorize(address(pool));
+        registry.authorize(address(vault));
+        console2.log("NullifierRegistry: pool and vault authorized");
 
         vm.stopBroadcast();
     }

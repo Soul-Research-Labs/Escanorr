@@ -17,3 +17,5 @@ thiserror.workspace = true
 
 [dev-dependencies]
 escanorr-prover.workspace = true
+escanorr-note.workspace = true
+escanorr-tree.workspace = true

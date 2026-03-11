@@ -671,10 +671,11 @@ dependencies = [
  "ff",
  "group",
  "halo2_gadgets",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "pasta_curves",
  "proptest",
  "rand 0.8.5",
+ "sha2",
  "thiserror 2.0.18",
 ]
 
@@ -795,7 +796,7 @@ dependencies = [
  "ff",
  "group",
  "halo2_gadgets",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "hex",
  "pasta_curves",
  "proptest",
@@ -813,9 +814,11 @@ name = "escanorr-prover"
 version = "0.1.0"
 dependencies = [
  "escanorr-circuits",
+ "escanorr-note",
  "escanorr-primitives",
+ "escanorr-tree",
  "ff",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "pasta_curves",
  "rand 0.8.5",
  "thiserror 2.0.18",
@@ -892,10 +895,12 @@ name = "escanorr-verifier"
 version = "0.1.0"
 dependencies = [
  "escanorr-circuits",
+ "escanorr-note",
  "escanorr-primitives",
  "escanorr-prover",
+ "escanorr-tree",
  "ff",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "pasta_curves",
  "thiserror 2.0.18",
  "tracing",
@@ -1111,7 +1116,7 @@ dependencies = [
  "bitvec",
  "ff",
  "group",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_gadgets-0.3.0)",
+ "halo2_proofs",
  "lazy_static",
  "pasta_curves",
  "rand 0.8.5",
@@ -1123,20 +1128,6 @@ dependencies = [
 name = "halo2_proofs"
 version = "0.3.0"
 source = "git+https://github.com/zcash/halo2.git?tag=halo2_gadgets-0.3.0#263356784042d7d4c1c17d357c94c1acaeb75ab5"
-dependencies = [
- "blake2b_simd",
- "ff",
- "group",
- "maybe-rayon",
- "pasta_curves",
- "rand_core 0.6.4",
- "tracing",
-]
-
-[[package]]
-name = "halo2_proofs"
-version = "0.3.0"
-source = "git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0#263356784042d7d4c1c17d357c94c1acaeb75ab5"
 dependencies = [
  "blake2b_simd",
  "ff",

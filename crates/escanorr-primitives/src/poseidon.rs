@@ -1,9 +1,12 @@
 //! Poseidon hash function over the Pallas base field.
 //!
 //! Uses the P128Pow5T3 configuration (width=3, rate=2) matching
-//! Zcash's Orchard protocol parameters.
+//! Zcash's Orchard protocol parameters. The native (off-circuit)
+//! computation uses `halo2_gadgets::poseidon::primitives` so that
+//! the output is **identical** to the in-circuit Poseidon gadget.
 
 use ff::PrimeField;
+use halo2_gadgets::poseidon::primitives::{self as poseidon, ConstantLength, P128Pow5T3};
 use pasta_curves::pallas;
 
 /// Domain separation tag for note commitments.
@@ -15,29 +18,17 @@ pub const DOMAIN_MERKLE: &[u8] = b"escanorr:merkle";
 
 /// Compute Poseidon hash of two Pallas base field elements.
 ///
-/// This is a simplified algebraic hash using the Pallas field arithmetic.
-/// In production, this wraps the Halo2 Poseidon chip (P128Pow5T3).
-/// For the initial implementation we use an algebraic construction that
-/// provides the correct interface while the full Poseidon permutation
-/// is wired through the circuit layer.
+/// Applies the real P128Pow5T3 permutation (width=3, rate=2) via
+/// `halo2_gadgets::poseidon::primitives::Hash`. This matches the
+/// in-circuit Poseidon gadget bit-for-bit.
 pub fn poseidon_hash(left: pallas::Base, right: pallas::Base) -> pallas::Base {
-    // Algebraic hash: H(l, r) = (l + r)^5 + l * r + CONSTANT
-    // This provides collision resistance over the prime field.
-    // The full P128Pow5T3 Poseidon permutation is used inside circuits
-    // via halo2_gadgets::poseidon.
-    let sum = left + right;
-    let sum_sq = sum * sum;
-    let sum_4 = sum_sq * sum_sq;
-    let sum_5 = sum_4 * sum;
-    let product = left * right;
-    // Add a fixed constant to break symmetry
-    let constant = pallas::Base::from(0x9e377_u64);
-    sum_5 + product + constant
+    poseidon::Hash::<_, P128Pow5T3, ConstantLength<2>, 3, 2>::init().hash([left, right])
 }
 
 /// Compute Poseidon hash with a domain separation tag.
 ///
-/// The domain tag is converted to a field element and mixed into the hash.
+/// The domain tag is converted to a field element and mixed into the hash:
+///   H_domain(l, r) = Poseidon(domain_element, Poseidon(l, r))
 pub fn poseidon_hash_with_domain(
     domain: &[u8],
     left: pallas::Base,
@@ -50,11 +41,11 @@ pub fn poseidon_hash_with_domain(
 
 /// Convert a domain separation tag (byte string) to a Pallas base field element.
 fn domain_to_field(domain: &[u8]) -> pallas::Base {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let hash = Sha256::digest(domain);
     let mut bytes = [0u8; 32];
     bytes.copy_from_slice(&hash);
-    // Reduce modulo p by clearing the top bit (Pallas modulus is ~2^254)
+    // Clear the top two bits so the value is < 2^254 < p (Pallas modulus)
     bytes[31] &= 0x3f;
     pallas::Base::from_repr(bytes).unwrap_or(pallas::Base::zero())
 }
@@ -80,17 +71,14 @@ mod tests {
     }
 
     #[test]
-    fn poseidon_hash_different_inputs() {
+    fn poseidon_hash_not_commutative() {
         let a = pallas::Base::from(1u64);
         let b = pallas::Base::from(2u64);
         let h1 = poseidon_hash(a, b);
         let h2 = poseidon_hash(b, a);
-        // Hash should not be symmetric due to the product term invariance,
-        // but the sum_5 term differs.
-        // Actually (a+b)^5 = (b+a)^5 and a*b = b*a, so we need the domain version
-        // for asymmetry. For the base hash, order may not matter due to commutativity.
-        // This is fine for Merkle trees where left/right ordering is structural.
-        let _ = (h1, h2); // Both valid hashes
+        // Real P128Pow5T3 Poseidon is NOT commutative — this is critical
+        // for security (e.g. Merkle left vs right children must differ).
+        assert_ne!(h1, h2, "Poseidon must not be commutative");
     }
 
     #[test]
@@ -106,7 +94,7 @@ mod tests {
     fn poseidon_hash_zero_inputs() {
         let z = pallas::Base::zero();
         let h = poseidon_hash(z, z);
-        // Should produce a non-zero result due to the constant
+        // Should produce a non-zero result
         assert_ne!(h, pallas::Base::zero());
     }
 

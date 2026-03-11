@@ -13,7 +13,7 @@ Escanorr extends Zcash's Orchard-level privacy across chains. It combines a Halo
 
 ## Why Escanorr?
 
-No production-grade Zcash ↔ EVM bridge exists. Zcash's privacy is single-chain. ESCANORR extends it cross-chain:
+No production-grade Zcash ↔ EVM bridge exists. Zcash's privacy is single-chain. Escanorr extends it cross-chain:
 
 - **Zcash-native cryptography**: Halo2 proving system over Pallas/Vesta curves — no trusted setup
 - **Cross-chain privacy**: Recursive proof wrapping (Halo2/IPA → Groth16/BN254) for EVM verification

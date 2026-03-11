@@ -25,8 +25,9 @@ repository = "https://github.com/Soul-Research-Labs/escanorr"
 authors = ["Soul Research Labs"]
 
 [workspace.dependencies]
-# Zcash ecosystem
-halo2_proofs = { git = "https://github.com/zcash/halo2.git", tag = "halo2_proofs-0.3.0" }
+# Zcash ecosystem — both crates must come from the same git revision
+# to avoid duplicate halo2_proofs in the dependency graph.
+halo2_proofs = { git = "https://github.com/zcash/halo2.git", tag = "halo2_gadgets-0.3.0" }
 halo2_gadgets = { git = "https://github.com/zcash/halo2.git", tag = "halo2_gadgets-0.3.0" }
 pasta_curves = { version = "0.5", features = ["alloc"] }
 ff = "0.13"
