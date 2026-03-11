@@ -20,7 +20,8 @@ const MAX_BODY_SIZE: usize = 128 * 1024;
 /// Run the ESCANORR RPC server on the given address.
 pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
     info!("Initializing verifier parameters (IPA setup)...");
-    let verifier = VerifierParams::setup();
+    let verifier = VerifierParams::setup()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("verifier setup failed: {e}")))?;
     info!("Verifier parameters ready.");
 
     let state: AppState = Arc::new(SharedState {

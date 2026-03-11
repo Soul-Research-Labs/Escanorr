@@ -110,7 +110,7 @@ impl Escanorr {
     /// Called lazily on first proof generation if not called explicitly.
     pub fn init_prover(&mut self) {
         if self.prover_params.is_none() {
-            self.prover_params = Some(ProverParams::setup());
+            self.prover_params = Some(ProverParams::setup().expect("prover parameter setup failed"));
         }
     }
 

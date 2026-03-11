@@ -25,28 +25,22 @@ pub struct ProverParams {
 impl ProverParams {
     /// Generate proving parameters for all circuits.
     /// This performs a one-time trusted setup (IPA — no toxic waste).
-    pub fn setup() -> Self {
+    pub fn setup() -> Result<Self, plonk::Error> {
         let params = Params::<vesta::Affine>::new(K_TRANSFER);
 
         let transfer_circuit = TransferCircuit::default();
-        let transfer_vk = keygen_vk(&params, &transfer_circuit)
-            .expect("transfer vk keygen failed");
-        let transfer_pk = keygen_pk(&params, transfer_vk.clone(), &transfer_circuit)
-            .expect("transfer pk keygen failed");
+        let transfer_vk = keygen_vk(&params, &transfer_circuit)?;
+        let transfer_pk = keygen_pk(&params, transfer_vk.clone(), &transfer_circuit)?;
 
         let withdraw_circuit = WithdrawCircuit::default();
-        let withdraw_vk = keygen_vk(&params, &withdraw_circuit)
-            .expect("withdraw vk keygen failed");
-        let withdraw_pk = keygen_pk(&params, withdraw_vk.clone(), &withdraw_circuit)
-            .expect("withdraw pk keygen failed");
+        let withdraw_vk = keygen_vk(&params, &withdraw_circuit)?;
+        let withdraw_pk = keygen_pk(&params, withdraw_vk.clone(), &withdraw_circuit)?;
 
         let bridge_circuit = BridgeCircuit::default();
-        let bridge_vk = keygen_vk(&params, &bridge_circuit)
-            .expect("bridge vk keygen failed");
-        let bridge_pk = keygen_pk(&params, bridge_vk.clone(), &bridge_circuit)
-            .expect("bridge pk keygen failed");
+        let bridge_vk = keygen_vk(&params, &bridge_circuit)?;
+        let bridge_pk = keygen_pk(&params, bridge_vk.clone(), &bridge_circuit)?;
 
-        Self {
+        Ok(Self {
             params,
             transfer_pk,
             transfer_vk,
@@ -54,7 +48,7 @@ impl ProverParams {
             withdraw_vk,
             bridge_pk,
             bridge_vk,
-        }
+        })
     }
 
     /// Get the common IPA parameters.
@@ -143,7 +137,7 @@ mod tests {
 
     #[test]
     fn prover_setup_and_transfer_proof() {
-        let params = ProverParams::setup();
+        let params = ProverParams::setup().expect("prover setup");
 
         let sk0 = pallas::Base::from(111u64);
         let sk1 = pallas::Base::from(222u64);

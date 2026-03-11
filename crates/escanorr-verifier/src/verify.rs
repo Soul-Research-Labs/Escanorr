@@ -20,22 +20,19 @@ pub struct VerifierParams {
 
 impl VerifierParams {
     /// Generate verifier parameters (verification keys only).
-    pub fn setup() -> Self {
+    pub fn setup() -> Result<Self, plonk::Error> {
         let params = Params::<vesta::Affine>::new(K_TRANSFER);
 
-        let transfer_vk = keygen_vk(&params, &TransferCircuit::default())
-            .expect("transfer vk keygen failed");
-        let withdraw_vk = keygen_vk(&params, &WithdrawCircuit::default())
-            .expect("withdraw vk keygen failed");
-        let bridge_vk = keygen_vk(&params, &BridgeCircuit::default())
-            .expect("bridge vk keygen failed");
+        let transfer_vk = keygen_vk(&params, &TransferCircuit::default())?;
+        let withdraw_vk = keygen_vk(&params, &WithdrawCircuit::default())?;
+        let bridge_vk = keygen_vk(&params, &BridgeCircuit::default())?;
 
-        Self {
+        Ok(Self {
             params,
             transfer_vk,
             withdraw_vk,
             bridge_vk,
-        }
+        })
     }
 }
 
@@ -112,7 +109,7 @@ mod tests {
 
     #[test]
     fn verify_valid_transfer() {
-        let prover_params = ProverParams::setup();
+        let prover_params = ProverParams::setup().expect("prover setup");
 
         let sk0 = pallas::Base::from(111u64);
         let sk1 = pallas::Base::from(222u64);
