@@ -4,6 +4,15 @@ use clap::{Parser, Subcommand};
 use escanorr_sdk::Escanorr;
 use ff::PrimeField;
 use std::net::SocketAddr;
+use std::path::PathBuf;
+
+/// Default wallet file location.
+fn default_wallet_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".escanorr")
+        .join("wallet.enc")
+}
 
 #[derive(Parser)]
 #[command(
@@ -12,6 +21,10 @@ use std::net::SocketAddr;
     version
 )]
 struct Cli {
+    /// Path to the encrypted wallet file.
+    #[arg(long, global = true, default_value_os_t = default_wallet_path())]
+    wallet_file: PathBuf,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -24,17 +37,17 @@ enum Commands {
         #[arg(short, long, default_value = "127.0.0.1:3030")]
         addr: SocketAddr,
     },
-    /// Generate a new wallet.
-    Keygen,
-    /// Show wallet info.
+    /// Create a new wallet and save it encrypted.
+    Init,
+    /// Show wallet info (owner address, balance).
     Info,
-    /// Deposit funds into the privacy pool (local demo).
+    /// Deposit funds into the privacy pool.
     Deposit {
         /// Value to deposit.
         #[arg(short, long)]
         value: u64,
     },
-    /// Show current balance (local demo).
+    /// Show current balance.
     Balance,
     /// Withdraw funds from the privacy pool with ZK proof.
     Withdraw {
@@ -81,10 +94,41 @@ fn hex_to_base(s: &str) -> Result<escanorr_primitives::Base, String> {
         .ok_or_else(|| "invalid field element".to_string())
 }
 
+/// Read password from terminal (no echo).
+fn read_password(prompt: &str) -> String {
+    eprint!("{prompt}");
+    rpassword::read_password().unwrap_or_else(|_| {
+        eprintln!("Failed to read password");
+        std::process::exit(1);
+    })
+}
+
+/// Load wallet from encrypted file, prompting for password.
+fn load_wallet(path: &std::path::Path) -> escanorr_client::Wallet {
+    if !path.exists() {
+        eprintln!("No wallet found at {}. Run `escanorr init` first.", path.display());
+        std::process::exit(1);
+    }
+    let password = read_password("Wallet password: ");
+    escanorr_client::Wallet::load(path, password.as_bytes()).unwrap_or_else(|e| {
+        eprintln!("Failed to load wallet: {e}");
+        std::process::exit(1);
+    })
+}
+
+/// Save wallet back to encrypted file after state changes.
+fn save_wallet(wallet: &escanorr_client::Wallet, path: &std::path::Path, password: &str) {
+    wallet.save(path, password.as_bytes()).unwrap_or_else(|e| {
+        eprintln!("Failed to save wallet: {e}");
+        std::process::exit(1);
+    });
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
+    let wallet_path = &cli.wallet_file;
 
     match cli.command {
         Commands::Serve { addr } => {
@@ -93,32 +137,58 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Keygen => {
+        Commands::Init => {
+            if wallet_path.exists() {
+                eprintln!("Wallet already exists at {}. Delete it first to reinitialize.", wallet_path.display());
+                std::process::exit(1);
+            }
+            let password = read_password("Choose wallet password: ");
+            let confirm = read_password("Confirm password: ");
+            if password != confirm {
+                eprintln!("Passwords do not match.");
+                std::process::exit(1);
+            }
             let wallet = escanorr_client::Wallet::random();
             let owner = wallet.owner().expect("wallet has key");
-            println!("New wallet created.");
+            save_wallet(&wallet, wallet_path, &password);
+            println!("Wallet created and saved to {}", wallet_path.display());
             println!("Owner: {}", hex::encode(owner.to_repr()));
         }
         Commands::Info => {
-            let esc = Escanorr::new();
-            let owner = esc.wallet().owner().expect("wallet has key");
-            println!("Owner: {}", hex::encode(owner.to_repr()));
-            println!("Balance: {}", esc.balance());
+            let wallet = load_wallet(wallet_path);
+            let owner = wallet.owner().expect("wallet has key");
+            println!("Wallet: {}", wallet_path.display());
+            println!("Owner:  {}", hex::encode(owner.to_repr()));
+            println!("Balance: {}", wallet.balance());
+            println!("Unspent notes: {}", wallet.unspent_notes().len());
         }
         Commands::Deposit { value } => {
-            let mut esc = Escanorr::new();
+            let password = read_password("Wallet password: ");
+            let wallet = escanorr_client::Wallet::load(wallet_path, password.as_bytes())
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to load wallet: {e}");
+                    std::process::exit(1);
+                });
+            let mut esc = Escanorr::with_wallet(wallet);
             let (note, index) = esc.deposit(value).expect("deposit failed");
             println!("Deposited {} at index {}", note.value, index);
             println!("New root: {}", hex::encode(esc.root().to_repr()));
+            // Save updated wallet (new note tracked)
+            save_wallet(esc.wallet(), wallet_path, &password);
+            println!("Wallet saved.");
         }
         Commands::Balance => {
-            let esc = Escanorr::new();
-            println!("Balance: {}", esc.balance());
+            let wallet = load_wallet(wallet_path);
+            println!("{}", wallet.balance());
         }
         Commands::Withdraw { value, fee } => {
-            let mut esc = Escanorr::new();
-            // In demo mode, deposit first so we have funds to withdraw
-            esc.deposit(value + fee).expect("deposit failed");
+            let password = read_password("Wallet password: ");
+            let wallet = escanorr_client::Wallet::load(wallet_path, password.as_bytes())
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to load wallet: {e}");
+                    std::process::exit(1);
+                });
+            let mut esc = Escanorr::with_wallet(wallet);
 
             println!("Initializing prover (one-time IPA setup)...");
             let result = esc.withdraw(value, fee).expect("withdraw failed");
@@ -129,6 +199,8 @@ async fn main() {
             }
             println!("  Proof size: {} bytes", result.proof.as_bytes().len());
             println!("  Proof (hex, first 64 chars): {}...", &hex::encode(&result.proof.as_bytes()[..32]));
+            save_wallet(esc.wallet(), wallet_path, &password);
+            println!("Wallet saved.");
         }
         Commands::Transfer { recipient, value, fee } => {
             let recipient_owner = hex_to_base(&recipient).unwrap_or_else(|e| {
@@ -136,9 +208,13 @@ async fn main() {
                 std::process::exit(1);
             });
 
-            let mut esc = Escanorr::new();
-            // In demo mode, deposit first so we have funds
-            esc.deposit(value + fee).expect("deposit failed");
+            let password = read_password("Wallet password: ");
+            let wallet = escanorr_client::Wallet::load(wallet_path, password.as_bytes())
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to load wallet: {e}");
+                    std::process::exit(1);
+                });
+            let mut esc = Escanorr::with_wallet(wallet);
 
             println!("Initializing prover (one-time IPA setup)...");
             let result = esc.send(recipient_owner, value, fee).expect("transfer failed");
@@ -147,11 +223,17 @@ async fn main() {
             println!("  Change note: value={}", result.output_notes[1].value);
             println!("  Proof size: {} bytes", result.proof.as_bytes().len());
             println!("  Proof (hex, first 64 chars): {}...", &hex::encode(&result.proof.as_bytes()[..32]));
+            save_wallet(esc.wallet(), wallet_path, &password);
+            println!("Wallet saved.");
         }
         Commands::Bridge { dest_chain_id, src_chain_id, fee } => {
-            let mut esc = Escanorr::new();
-            // In demo mode, deposit first
-            esc.deposit(1000 + fee).expect("deposit failed");
+            let password = read_password("Wallet password: ");
+            let wallet = escanorr_client::Wallet::load(wallet_path, password.as_bytes())
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to load wallet: {e}");
+                    std::process::exit(1);
+                });
+            let mut esc = Escanorr::with_wallet(wallet);
 
             let dest_owner = esc.wallet().owner().expect("wallet has key");
 
@@ -163,6 +245,8 @@ async fn main() {
             println!("  Destination note: value={}", result.dest_note.value);
             println!("  Proof size: {} bytes", result.proof.as_bytes().len());
             println!("  Proof (hex, first 64 chars): {}...", &hex::encode(&result.proof.as_bytes()[..32]));
+            save_wallet(esc.wallet(), wallet_path, &password);
+            println!("Wallet saved.");
         }
     }
 }

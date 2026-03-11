@@ -71,6 +71,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
+rpassword = "5"
+dirs = "6"
 
 # Testing
 proptest = "1"
