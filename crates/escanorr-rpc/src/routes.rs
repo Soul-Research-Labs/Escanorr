@@ -7,6 +7,7 @@ use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 use escanorr_node::NodeState;
 
@@ -173,8 +174,12 @@ pub async fn post_deposit(
     let mut node = state.node.write().await;
     let index = node
         .deposit(commitment, body.value)
-        .map_err(|_| StatusCode::CONFLICT)?;
+        .map_err(|e| {
+            warn!(error = %e, value = body.value, "deposit failed");
+            StatusCode::CONFLICT
+        })?;
     let root = base_to_hex(&node.root());
+    info!(index, value = body.value, "deposit accepted");
     Ok(Json(DepositResponse { index, root }))
 }
 
@@ -199,12 +204,19 @@ pub async fn post_transfer(
     pi.extend_from_slice(&nullifiers);
     pi.extend_from_slice(&output_cms);
     verify_transfer(&state.verifier, &envelope, &[&pi])
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|e| {
+            warn!(error = %e, "transfer proof verification failed");
+            StatusCode::FORBIDDEN
+        })?;
 
     let mut node = state.node.write().await;
     node.transfer(nullifiers, merkle_root, output_cms)
-        .map_err(|_| StatusCode::CONFLICT)?;
+        .map_err(|e| {
+            warn!(error = %e, "transfer state update failed");
+            StatusCode::CONFLICT
+        })?;
 
+    info!("transfer accepted");
     Ok(StatusCode::OK)
 }
 
@@ -232,12 +244,19 @@ pub async fn post_withdraw(
         Base::from(body.exit_value),
     ];
     verify_withdraw(&state.verifier, &envelope, &[&pi])
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|e| {
+            warn!(error = %e, "withdraw proof verification failed");
+            StatusCode::FORBIDDEN
+        })?;
 
     let mut node = state.node.write().await;
     node.withdraw(nullifier, merkle_root, body.exit_value, change_commitment)
-        .map_err(|_| StatusCode::CONFLICT)?;
+        .map_err(|e| {
+            warn!(error = %e, exit_value = body.exit_value, "withdraw state update failed");
+            StatusCode::CONFLICT
+        })?;
 
+    info!(exit_value = body.exit_value, "withdraw accepted");
     Ok(Json(WithdrawResponse {
         nullifier: body.nullifier,
         exit_value: body.exit_value,
@@ -274,13 +293,20 @@ pub async fn post_bridge_lock(
         Base::from(body.destination_chain_id),
     ];
     verify_bridge(&state.verifier, &envelope, &[&pi])
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|e| {
+            warn!(error = %e, "bridge proof verification failed");
+            StatusCode::FORBIDDEN
+        })?;
 
     // Nullify the source note (withdraw with 0 exit)
     let mut node = state.node.write().await;
     node.withdraw(nullifier, merkle_root, 0, None)
-        .map_err(|_| StatusCode::CONFLICT)?;
+        .map_err(|e| {
+            warn!(error = %e, src = body.source_chain_id, dest = body.destination_chain_id, "bridge lock state update failed");
+            StatusCode::CONFLICT
+        })?;
 
+    info!(src = body.source_chain_id, dest = body.destination_chain_id, "bridge lock accepted");
     Ok(Json(BridgeLockResponse {
         nullifier: body.nullifier,
         status: "pending",
