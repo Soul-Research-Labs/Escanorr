@@ -26,6 +26,9 @@ tracing.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 
+[dev-dependencies]
+tempfile = "3"
+
 [[example]]
 name = "e2e"
 path = "examples/e2e.rs"

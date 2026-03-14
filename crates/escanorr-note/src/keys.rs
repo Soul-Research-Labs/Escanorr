@@ -11,7 +11,6 @@ use ff::{Field, PrimeField};
 use group::Group;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 use rand::rngs::OsRng;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A spending key — the master secret for a wallet.
 ///
