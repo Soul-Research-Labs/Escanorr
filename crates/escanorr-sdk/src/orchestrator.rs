@@ -114,6 +114,20 @@ impl Escanorr {
         }
     }
 
+    /// Initialize prover parameters asynchronously.
+    /// Runs the expensive setup on a blocking thread so it doesn't stall
+    /// the async runtime.
+    pub async fn init_prover_async(&mut self) {
+        if self.prover_params.is_none() {
+            let params = tokio::task::spawn_blocking(|| {
+                ProverParams::setup().expect("prover parameter setup failed")
+            })
+            .await
+            .expect("prover setup task panicked");
+            self.prover_params = Some(params);
+        }
+    }
+
     /// Get the wallet.
     pub fn wallet(&self) -> &Wallet {
         &self.wallet
