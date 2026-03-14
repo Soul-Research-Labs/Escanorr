@@ -90,6 +90,12 @@ enum Commands {
         #[arg(short, long, default_value = "0")]
         fee: u64,
     },
+    /// Show recent transaction history.
+    History {
+        /// Number of entries to show.
+        #[arg(short, long, default_value = "20")]
+        count: usize,
+    },
 }
 
 fn hex_to_base(s: &str) -> Result<escanorr_primitives::Base, String> {
@@ -305,6 +311,24 @@ async fn main() {
             println!("  Proof (hex, first 64 chars): {}...", &hex::encode(&result.proof.as_bytes()[..32]));
             save_wallet(esc.wallet(), wallet_path, &password);
             println!("Wallet saved.");
+        }
+        Commands::History { count } => {
+            let wallet = load_wallet(wallet_path);
+            let esc = Escanorr::with_wallet(wallet);
+            let history = esc.node().history();
+            if history.is_empty() {
+                println!("No transaction history.");
+                return;
+            }
+            let start = history.len().saturating_sub(count);
+            for (i, record) in history.iter().skip(start).enumerate() {
+                let kind = match &record.kind {
+                    escanorr_node::TxKind::Deposit { value } => format!("deposit  value={}", value),
+                    escanorr_node::TxKind::Withdraw { exit_value } => format!("withdraw exit={}", exit_value),
+                    escanorr_node::TxKind::Transfer => "transfer".to_string(),
+                };
+                println!("  [{:>4}] epoch={} tree_size={} {}", start + i, record.epoch, record.tree_size, kind);
+            }
         }
     }
 }
