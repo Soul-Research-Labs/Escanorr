@@ -4,7 +4,9 @@
 //! proof generation.
 
 mod state;
+pub mod batch;
 pub mod storage;
 
+pub use batch::{BatchAccumulator, BatchConfig, PendingTx};
 pub use state::{NodeState, NodeError, TxRecord, TxKind};
 pub use storage::{NodeStorage, StorageError};
