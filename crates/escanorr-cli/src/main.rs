@@ -249,7 +249,7 @@ async fn main() {
             let mut esc = Escanorr::with_wallet(wallet);
 
             println!("Initializing prover (one-time IPA setup, this may take a few minutes)...");
-            esc.init_prover_async().await;
+            esc.init_prover_async().await.expect("prover initialization failed");
             println!("Prover ready.");
             let result = esc.withdraw(value, fee).expect("withdraw failed");
             println!("Withdrawal complete!");
@@ -277,7 +277,7 @@ async fn main() {
             let mut esc = Escanorr::with_wallet(wallet);
 
             println!("Initializing prover (one-time IPA setup, this may take a few minutes)...");
-            esc.init_prover_async().await;
+            esc.init_prover_async().await.expect("prover initialization failed");
             println!("Prover ready.");
             let result = esc.send(recipient_owner, value, fee).expect("transfer failed");
             println!("Transfer complete!");
@@ -300,7 +300,7 @@ async fn main() {
             let dest_owner = esc.wallet().owner().expect("wallet has key");
 
             println!("Initializing prover (one-time IPA setup, this may take a few minutes)...");
-            esc.init_prover_async().await;
+            esc.init_prover_async().await.expect("prover initialization failed");
             println!("Prover ready.");
             let result = esc.bridge(dest_owner, src_chain_id, dest_chain_id, fee)
                 .expect("bridge failed");

@@ -296,7 +296,7 @@ Before deploying with real funds, complete every item below:
 - [ ] **Recursive proof wrapping** — Complete the `snark-verifier` integration in `EvmAdapter::submit()` (currently returns `EvmWrappingNotImplemented`)
 - [ ] **On-chain Merkle tree depth** — Verify the depth-32 IncrementalMerkleTree gas profile meets target chain block limits
 - [ ] **Key management** — Hardware-backed key storage for relayer signing keys and contract admin keys
-- [x] **Rate limiting** — Per-IP sliding-window rate limiter (60 req/min) with exempt IPs, deployed on the RPC server (128 KiB body limit)
+- [x] **Rate limiting** — Per-IP sliding-window rate limiter (configurable via `ESCANORR_RATE_LIMIT_REQUESTS` and `ESCANORR_RATE_LIMIT_WINDOW_SECS` env vars, default 60 req/60 s) with exempt IPs, deployed on the RPC server (128 KiB body limit)
 - [x] **Monitoring** — Prometheus metrics on `/metrics` (deposits, transfers, withdrawals, bridge locks, tree size, epoch, nullifier count)
 - [ ] **Incident response** — Emergency pause procedures tested; owner multisig deployed
 - [ ] **Fuzz testing** — Run `cargo fuzz` targets for extended duration (current CI only compile-checks)

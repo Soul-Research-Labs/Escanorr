@@ -74,7 +74,7 @@ fn stealth_addresses_are_unique() {
 fn note_commitment_deterministic() {
     let sk = SpendingKey::random();
     let fvk = sk.to_full_viewing_key();
-    let owner = fvk.viewing_key.to_owner();
+    let owner = fvk.viewing_key.to_owner().unwrap();
     let blinding = pallas::Base::from(42u64);
 
     let note1 = Note::with_blinding(owner, 1000, 0, blinding);
@@ -88,7 +88,7 @@ fn note_commitment_deterministic() {
 fn note_commitment_changes_with_value() {
     let sk = SpendingKey::random();
     let fvk = sk.to_full_viewing_key();
-    let owner = fvk.viewing_key.to_owner();
+    let owner = fvk.viewing_key.to_owner().unwrap();
 
     let note1 = Note::new(owner, 1000, 0);
     let note2 = Note::new(owner, 2000, 0);

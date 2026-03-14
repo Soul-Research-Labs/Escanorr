@@ -100,24 +100,26 @@ impl ViewingKey {
     }
 
     /// Get the x-coordinate as a base field element (for use as note owner).
-    pub fn to_owner(&self) -> pallas::Base {
+    /// Returns `None` if the point is the identity (infinity).
+    pub fn to_owner(&self) -> Option<pallas::Base> {
         let affine: pallas::Affine = self.0.into();
         let coords = affine.coordinates();
         if bool::from(coords.is_some()) {
-            *coords.unwrap().x()
+            Some(*coords.unwrap().x())
         } else {
-            pallas::Base::zero()
+            None
         }
     }
 
     /// Serialize to bytes (compressed point representation).
-    pub fn to_bytes(&self) -> [u8; 32] {
+    /// Returns `None` if the point is the identity (infinity).
+    pub fn to_bytes(&self) -> Option<[u8; 32]> {
         let affine: pallas::Affine = self.0.into();
         let coords = affine.coordinates();
         if bool::from(coords.is_some()) {
-            coords.unwrap().x().to_repr()
+            Some(coords.unwrap().x().to_repr())
         } else {
-            [0u8; 32] // Point at infinity
+            None
         }
     }
 }
@@ -131,7 +133,8 @@ pub struct FullViewingKey {
 
 impl FullViewingKey {
     /// Compute the "owner" field for notes owned by this key.
-    pub fn owner(&self) -> pallas::Base {
+    /// Returns `None` if the viewing key is the identity point.
+    pub fn owner(&self) -> Option<pallas::Base> {
         self.viewing_key.to_owner()
     }
 
@@ -173,7 +176,7 @@ mod tests {
     fn full_viewing_key_owner() {
         let sk = SpendingKey::random();
         let fvk = sk.to_full_viewing_key();
-        let owner = fvk.owner();
+        let owner = fvk.owner().expect("non-identity point");
         assert_ne!(owner, pallas::Base::zero());
     }
 

@@ -134,6 +134,7 @@ contract NullifierRegistry {
     /// @notice Transfer ownership
     /// @param newOwner New owner address
     function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
         owner = newOwner;
     }
 }

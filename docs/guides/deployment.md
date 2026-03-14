@@ -87,6 +87,8 @@ All values are in `deploy/helm/escanorr/values.yaml`:
 | `env.RUST_LOG`              | `info,escanorr=debug`                 | Log filter             |
 | `env.ESCANORR_HOST`         | `0.0.0.0`                             | Bind address           |
 | `env.ESCANORR_PORT`         | `3000`                                | RPC port               |
+| `env.ESCANORR_RATE_LIMIT_REQUESTS` | `60`                            | Max requests per window per IP |
+| `env.ESCANORR_RATE_LIMIT_WINDOW_SECS` | `60`                         | Rate limit window (seconds) |
 | `resources.requests.memory` | `256Mi`                               | Memory request         |
 | `resources.requests.cpu`    | `250m`                                | CPU request            |
 | `resources.limits.memory`   | `1Gi`                                 | Memory limit           |

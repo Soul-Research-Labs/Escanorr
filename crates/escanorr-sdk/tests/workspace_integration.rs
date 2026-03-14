@@ -125,7 +125,7 @@ fn double_spend_prevention_end_to_end() {
     let mut node = NodeState::new();
 
     let sk = SpendingKey::random();
-    let owner = sk.to_full_viewing_key().viewing_key.to_owner();
+    let owner = sk.to_full_viewing_key().viewing_key.to_owner().unwrap();
     let note = Note::new(owner, 1000, 0);
     let cm = note.commitment();
     node.deposit(cm.0, 1000).unwrap();

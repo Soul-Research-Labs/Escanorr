@@ -15,12 +15,12 @@ fn deposit_transfer_balance_e2e() {
     // Alice's wallet
     let alice_sk = SpendingKey::random();
     let alice_fvk = alice_sk.to_full_viewing_key();
-    let alice_owner = alice_fvk.viewing_key.to_owner();
+    let alice_owner = alice_fvk.viewing_key.to_owner().unwrap();
 
     // Bob's wallet
     let bob_sk = SpendingKey::random();
     let bob_fvk = bob_sk.to_full_viewing_key();
-    let bob_owner = bob_fvk.viewing_key.to_owner();
+    let bob_owner = bob_fvk.viewing_key.to_owner().unwrap();
 
     // Node state (privacy pool)
     let mut node = NodeState::new();
@@ -72,7 +72,7 @@ fn multi_user_deposits() {
         .collect();
 
     for (i, fvk) in users.iter().enumerate() {
-        let owner = fvk.viewing_key.to_owner();
+        let owner = fvk.viewing_key.to_owner().unwrap();
         let note = Note::new(owner, (i as u64 + 1) * 100, 0);
         let value = (i as u64 + 1) * 100;
         let idx = node.deposit(note.commitment().0, value).unwrap();

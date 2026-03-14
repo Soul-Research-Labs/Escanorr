@@ -12,7 +12,7 @@ fn main() {
 
     // Create a destination key on the target chain
     let dest_sk = SpendingKey::random();
-    let dest_owner = dest_sk.to_full_viewing_key().viewing_key.to_owner();
+    let dest_owner = dest_sk.to_full_viewing_key().viewing_key.to_owner().unwrap();
 
     // Bridge to chain 1_000_001 (Ethereum) with fee 5
     let result = esc

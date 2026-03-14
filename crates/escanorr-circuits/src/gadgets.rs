@@ -403,3 +403,291 @@ pub fn range_check_gadget(
         },
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use halo2_proofs::{
+        circuit::{SimpleFloorPlanner, Value},
+        dev::MockProver,
+        plonk::Circuit,
+    };
+    use pasta_curves::pallas;
+
+    // ── Poseidon gadget test circuit ────────────────────────────────
+
+    #[derive(Clone)]
+    struct PoseidonTestConfig {
+        pos: PoseidonGadgetConfig,
+        instance: Column<halo2_proofs::plonk::Instance>,
+    }
+
+    #[derive(Default)]
+    struct PoseidonTestCircuit {
+        left: Value<pallas::Base>,
+        right: Value<pallas::Base>,
+    }
+
+    impl Circuit<pallas::Base> for PoseidonTestCircuit {
+        type Config = PoseidonTestConfig;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            Self::default()
+        }
+
+        fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> Self::Config {
+            let state = [
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+            ];
+            let partial = meta.advice_column();
+            let rc_a = [meta.fixed_column(), meta.fixed_column(), meta.fixed_column()];
+            let rc_b = [meta.fixed_column(), meta.fixed_column(), meta.fixed_column()];
+            let instance = meta.instance_column();
+            meta.enable_equality(instance);
+            meta.enable_constant(rc_a[0]);
+
+            let pos = configure_poseidon(meta, state, partial, rc_a, rc_b);
+            PoseidonTestConfig { pos, instance }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<pallas::Base>,
+        ) -> Result<(), Error> {
+            let (left, right) = layouter.assign_region(
+                || "inputs",
+                |mut region| {
+                    let l = region.assign_advice(
+                        || "left",
+                        config.pos.state_advice[0],
+                        0,
+                        || self.left,
+                    )?;
+                    let r = region.assign_advice(
+                        || "right",
+                        config.pos.state_advice[1],
+                        0,
+                        || self.right,
+                    )?;
+                    Ok((l, r))
+                },
+            )?;
+
+            let hash = poseidon_hash_gadget(
+                &config.pos,
+                layouter.namespace(|| "hash"),
+                left,
+                right,
+            )?;
+
+            layouter.constrain_instance(hash.cell(), config.instance, 0)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn poseidon_gadget_matches_native() {
+        let a = pallas::Base::from(42u64);
+        let b = pallas::Base::from(99u64);
+        let expected = escanorr_primitives::poseidon::poseidon_hash(a, b);
+
+        let circuit = PoseidonTestCircuit {
+            left: Value::known(a),
+            right: Value::known(b),
+        };
+        let prover = MockProver::run(10, &circuit, vec![vec![expected]]).unwrap();
+        prover.assert_satisfied();
+    }
+
+    #[test]
+    fn poseidon_gadget_wrong_output_fails() {
+        let a = pallas::Base::from(1u64);
+        let b = pallas::Base::from(2u64);
+        let wrong = pallas::Base::from(999u64);
+
+        let circuit = PoseidonTestCircuit {
+            left: Value::known(a),
+            right: Value::known(b),
+        };
+        let prover = MockProver::run(10, &circuit, vec![vec![wrong]]).unwrap();
+        assert!(prover.verify().is_err());
+    }
+
+    // ── Range check gadget test circuit ─────────────────────────────
+
+    #[derive(Clone)]
+    struct RangeTestConfig {
+        rc: RangeCheckConfig,
+        input: Column<Advice>,
+    }
+
+    struct RangeTestCircuit {
+        value: Value<pallas::Base>,
+        num_bits: usize,
+    }
+
+    impl Circuit<pallas::Base> for RangeTestCircuit {
+        type Config = RangeTestConfig;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            RangeTestCircuit {
+                value: Value::unknown(),
+                num_bits: self.num_bits,
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> Self::Config {
+            let z_col = meta.advice_column();
+            let bit_col = meta.advice_column();
+            let fixed_col = meta.fixed_column();
+            meta.enable_equality(z_col);
+            meta.enable_constant(fixed_col);
+
+            let rc = configure_range_check(meta, z_col, bit_col);
+            RangeTestConfig { rc, input: z_col }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<pallas::Base>,
+        ) -> Result<(), Error> {
+            let val = layouter.assign_region(
+                || "input",
+                |mut region| {
+                    region.assign_advice(|| "val", config.input, 0, || self.value)
+                },
+            )?;
+
+            range_check_gadget(&config.rc, layouter.namespace(|| "range"), val, self.num_bits)
+        }
+    }
+
+    #[test]
+    fn range_check_valid_8bit() {
+        let circuit = RangeTestCircuit {
+            value: Value::known(pallas::Base::from(255u64)),
+            num_bits: 8,
+        };
+        let prover = MockProver::run(10, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+    }
+
+    #[test]
+    fn range_check_zero() {
+        let circuit = RangeTestCircuit {
+            value: Value::known(pallas::Base::zero()),
+            num_bits: 8,
+        };
+        let prover = MockProver::run(10, &circuit, vec![]).unwrap();
+        prover.assert_satisfied();
+    }
+
+    #[test]
+    fn range_check_overflow_fails() {
+        let circuit = RangeTestCircuit {
+            value: Value::known(pallas::Base::from(256u64)),
+            num_bits: 8,
+        };
+        let prover = MockProver::run(10, &circuit, vec![]).unwrap();
+        assert!(prover.verify().is_err());
+    }
+
+    // ── Nullifier gadget test circuit ───────────────────────────────
+
+    #[derive(Clone)]
+    struct NullifierTestConfig {
+        pos: PoseidonGadgetConfig,
+        instance: Column<halo2_proofs::plonk::Instance>,
+    }
+
+    #[derive(Default)]
+    struct NullifierTestCircuit {
+        sk: Value<pallas::Base>,
+        cm: Value<pallas::Base>,
+    }
+
+    impl Circuit<pallas::Base> for NullifierTestCircuit {
+        type Config = NullifierTestConfig;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            Self::default()
+        }
+
+        fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> Self::Config {
+            let state = [
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+            ];
+            let partial = meta.advice_column();
+            let rc_a = [meta.fixed_column(), meta.fixed_column(), meta.fixed_column()];
+            let rc_b = [meta.fixed_column(), meta.fixed_column(), meta.fixed_column()];
+            let instance = meta.instance_column();
+            meta.enable_equality(instance);
+            meta.enable_constant(rc_a[0]);
+
+            let pos = configure_poseidon(meta, state, partial, rc_a, rc_b);
+            NullifierTestConfig { pos, instance }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<pallas::Base>,
+        ) -> Result<(), Error> {
+            let (sk_cell, cm_cell) = layouter.assign_region(
+                || "inputs",
+                |mut region| {
+                    let s = region.assign_advice(
+                        || "sk",
+                        config.pos.state_advice[0],
+                        0,
+                        || self.sk,
+                    )?;
+                    let c = region.assign_advice(
+                        || "cm",
+                        config.pos.state_advice[1],
+                        0,
+                        || self.cm,
+                    )?;
+                    Ok((s, c))
+                },
+            )?;
+
+            let nf = nullifier_gadget(
+                &config.pos,
+                layouter.namespace(|| "nf"),
+                sk_cell,
+                cm_cell,
+            )?;
+
+            layouter.constrain_instance(nf.cell(), config.instance, 0)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn nullifier_gadget_matches_native() {
+        let sk = pallas::Base::from(12345u64);
+        let cm = pallas::Base::from(67890u64);
+        let expected = escanorr_primitives::poseidon::poseidon_hash_with_domain(
+            escanorr_primitives::poseidon::DOMAIN_NULLIFIER,
+            sk,
+            cm,
+        );
+
+        let circuit = NullifierTestCircuit {
+            sk: Value::known(sk),
+            cm: Value::known(cm),
+        };
+        let prover = MockProver::run(10, &circuit, vec![vec![expected]]).unwrap();
+        prover.assert_satisfied();
+    }
+}

@@ -46,6 +46,8 @@ contract BridgeVault {
     error TransferFailed();
     error VaultPaused();
     error Unauthorized();
+    error ZeroAddress();
+    error ReentrancyGuardFailed();
 
     // ──────────────────────────────────────────────────────────────────
     // State
@@ -68,6 +70,9 @@ contract BridgeVault {
 
     /// @notice Contract owner
     address public owner;
+
+    /// @notice Reentrancy guard status (1 = not entered, 2 = entered)
+    uint256 private _reentrancyStatus = 1;
 
     struct BridgeOp {
         bytes32 commitmentHash;
@@ -101,6 +106,13 @@ contract BridgeVault {
     modifier onlyOwner() {
         if (msg.sender != owner) revert Unauthorized();
         _;
+    }
+
+    modifier nonReentrant() {
+        if (_reentrancyStatus == 2) revert ReentrancyGuardFailed();
+        _reentrancyStatus = 2;
+        _;
+        _reentrancyStatus = 1;
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -173,7 +185,7 @@ contract BridgeVault {
         address recipient,
         uint256 amount,
         uint256 sourceChainId
-    ) external whenNotPaused {
+    ) external whenNotPaused nonReentrant {
         if (recipient == address(0)) revert InvalidRecipient();
         if (nullifier == bytes32(0)) revert InvalidNullifier();
         if (amount == 0) revert InvalidAmount();
@@ -222,6 +234,7 @@ contract BridgeVault {
 
     /// @notice Transfer ownership
     function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
         owner = newOwner;
     }
 

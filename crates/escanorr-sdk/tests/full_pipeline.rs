@@ -17,11 +17,11 @@ fn full_privacy_pipeline() {
     // 1. Key generation
     let alice_sk = SpendingKey::random();
     let alice_fvk = alice_sk.to_full_viewing_key();
-    let alice_owner = alice_fvk.owner();
+    let alice_owner = alice_fvk.owner().unwrap();
 
     let bob_sk = SpendingKey::random();
     let bob_fvk = bob_sk.to_full_viewing_key();
-    let _bob_owner = bob_fvk.owner();
+    let _bob_owner = bob_fvk.owner().unwrap();
 
     // 2. Alice creates a note
     let note = Note::new(alice_owner, 500, 0);
@@ -73,7 +73,7 @@ fn full_privacy_pipeline() {
 fn sdk_two_wallet_transfer() {
     let mut alice = Escanorr::new();
     let bob_sk = SpendingKey::random();
-    let bob_owner = bob_sk.to_full_viewing_key().owner();
+    let bob_owner = bob_sk.to_full_viewing_key().owner().unwrap();
 
     // Alice deposits
     alice.deposit(1000).unwrap();
@@ -93,7 +93,7 @@ fn cross_chain_nullifier_isolation() {
     let sk = SpendingKey::random();
     let fvk = sk.to_full_viewing_key();
 
-    let note = Note::new(fvk.owner(), 100, 0);
+    let note = Note::new(fvk.owner().unwrap(), 100, 0);
     let cm = note.commitment();
 
     let ethereum = DomainSeparator::new(1, 0);

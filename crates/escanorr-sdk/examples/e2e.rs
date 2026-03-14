@@ -14,7 +14,7 @@ fn main() {
     // Create recipient
     let recipient_sk = SpendingKey::random();
     let recipient_fvk = recipient_sk.to_full_viewing_key();
-    let recipient_owner = recipient_fvk.viewing_key.to_owner();
+    let recipient_owner = recipient_fvk.viewing_key.to_owner().unwrap();
 
     // Send 400 with 10 fee (generates ZK proof)
     let result = esc.send(recipient_owner, 400, 10).expect("send failed");

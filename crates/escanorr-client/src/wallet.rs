@@ -85,7 +85,7 @@ impl Wallet {
 
     /// Get the wallet's owner address (x-coordinate of viewing key point).
     pub fn owner(&self) -> Option<Base> {
-        self.fvk.as_ref().map(|fvk| fvk.viewing_key.to_owner())
+        self.fvk.as_ref().and_then(|fvk| fvk.viewing_key.to_owner())
     }
 
     /// Track a new note as owned.
@@ -196,12 +196,12 @@ struct OwnedNoteData {
 
 /// Derive a 32-byte AES key from a password and salt using Argon2id.
 /// The caller is responsible for zeroizing the returned key after use.
-fn derive_key(password: &[u8], salt: &[u8]) -> [u8; 32] {
+fn derive_key(password: &[u8], salt: &[u8]) -> Result<[u8; 32], WalletError> {
     let mut key = [0u8; 32];
     Argon2::default()
         .hash_password_into(password, salt, &mut key)
-        .expect("argon2 key derivation");
-    key
+        .map_err(|_| WalletError::Decryption)?;
+    Ok(key)
 }
 
 impl Wallet {
@@ -234,8 +234,8 @@ impl Wallet {
         rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut salt);
         rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut nonce_bytes);
 
-        let mut key = derive_key(password, &salt);
-        let cipher = Aes256Gcm::new_from_slice(&key).expect("valid key size");
+        let mut key = derive_key(password, &salt)?;
+        let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| WalletError::Decryption)?;
         key.zeroize();
         let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -275,8 +275,8 @@ impl Wallet {
             return Err(WalletError::Decryption);
         }
 
-        let mut key = derive_key(password, &salt);
-        let cipher = Aes256Gcm::new_from_slice(&key).expect("valid key size");
+        let mut key = derive_key(password, &salt)?;
+        let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| WalletError::Decryption)?;
         key.zeroize();
         let nonce = Nonce::from_slice(&nonce_bytes);
 

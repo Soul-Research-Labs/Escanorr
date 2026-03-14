@@ -34,6 +34,8 @@ pub enum SdkError {
     NeedConsolidation,
     #[error("prover not initialized; call init_prover() or init_prover_async() first")]
     ProverNotInitialized,
+    #[error("prover setup failed: {0}")]
+    ProverSetup(String),
 }
 
 /// Result of a private transfer.
@@ -110,24 +112,29 @@ impl Escanorr {
 
     /// Initialize prover parameters (expensive one-time IPA setup).
     /// Called lazily on first proof generation if not called explicitly.
-    pub fn init_prover(&mut self) {
+    pub fn init_prover(&mut self) -> Result<(), SdkError> {
         if self.prover_params.is_none() {
-            self.prover_params = Some(ProverParams::setup().expect("prover parameter setup failed"));
+            self.prover_params = Some(
+                ProverParams::setup().map_err(|e| SdkError::ProverSetup(e.to_string()))?,
+            );
         }
+        Ok(())
     }
 
     /// Initialize prover parameters asynchronously.
     /// Runs the expensive setup on a blocking thread so it doesn't stall
     /// the async runtime.
-    pub async fn init_prover_async(&mut self) {
+    pub async fn init_prover_async(&mut self) -> Result<(), SdkError> {
         if self.prover_params.is_none() {
             let params = tokio::task::spawn_blocking(|| {
-                ProverParams::setup().expect("prover parameter setup failed")
+                ProverParams::setup().map_err(|e| SdkError::ProverSetup(e.to_string()))
             })
             .await
-            .expect("prover setup task panicked");
+            .map_err(|e| SdkError::ProverSetup(format!("task panicked: {e}")))?
+            ?;
             self.prover_params = Some(params);
         }
+        Ok(())
     }
 
     /// Get the wallet.
@@ -174,7 +181,7 @@ impl Escanorr {
         amount: u64,
         fee: u64,
     ) -> Result<TransferResult, SdkError> {
-        self.init_prover();
+        self.init_prover()?;
 
         let total_needed = amount + fee;
         let sk_base = self.wallet.spending_key().ok_or(SdkError::NoWallet)?.to_base();
@@ -300,7 +307,7 @@ impl Escanorr {
         exit_value: u64,
         fee: u64,
     ) -> Result<WithdrawResult, SdkError> {
-        self.init_prover();
+        self.init_prover()?;
 
         let total_needed = exit_value + fee;
         let sk_base = self.wallet.spending_key().ok_or(SdkError::NoWallet)?.to_base();
@@ -398,7 +405,7 @@ impl Escanorr {
         dest_chain_id: u64,
         fee: u64,
     ) -> Result<BridgeResult, SdkError> {
-        self.init_prover();
+        self.init_prover()?;
 
         let sk_base = self.wallet.spending_key().ok_or(SdkError::NoWallet)?.to_base();
 
@@ -528,7 +535,7 @@ mod tests {
 
         // Create a recipient
         let recipient_sk = SpendingKey::random();
-        let recipient_owner = recipient_sk.to_full_viewing_key().viewing_key.to_owner();
+        let recipient_owner = recipient_sk.to_full_viewing_key().viewing_key.to_owner().unwrap();
 
         // Send with ZK proof
         let result = esc.send(recipient_owner, 400, 10).unwrap();

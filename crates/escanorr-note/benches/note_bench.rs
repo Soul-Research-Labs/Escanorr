@@ -23,7 +23,7 @@ fn bench_full_viewing_key(c: &mut Criterion) {
 fn bench_note_commitment(c: &mut Criterion) {
     let sk = SpendingKey::random();
     let fvk = sk.to_full_viewing_key();
-    let owner = fvk.viewing_key.to_owner();
+    let owner = fvk.viewing_key.to_owner().unwrap();
     let note = Note::new(owner, 1000, 0);
 
     c.bench_function("note_commitment", |b| {
@@ -53,7 +53,7 @@ fn bench_decrypt_note(c: &mut Criterion) {
 fn bench_nullifier(c: &mut Criterion) {
     let sk = SpendingKey::random();
     let fvk = sk.to_full_viewing_key();
-    let owner = fvk.viewing_key.to_owner();
+    let owner = fvk.viewing_key.to_owner().unwrap();
     let note = Note::new(owner, 1000, 0);
     let cm = note.commitment().0;
 
