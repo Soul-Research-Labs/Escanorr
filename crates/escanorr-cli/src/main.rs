@@ -45,7 +45,8 @@ enum Commands {
         #[arg(short, long)]
         mnemonic: Option<String>,
     },
-    /// Export the wallet's BIP39-compatible spending key (hex) for backup.
+    /// Export the wallet's spending key (hex) for backup.
+    /// For mnemonic recovery, use the phrase shown during `init`.
     Export,
     /// Show wallet info (owner address, balance).
     Info,
@@ -168,11 +169,16 @@ async fn main() {
                 eprintln!("Passwords do not match.");
                 std::process::exit(1);
             }
-            let wallet = escanorr_client::Wallet::random();
+            let (wallet, mnemonic) = escanorr_client::Wallet::from_new_mnemonic();
             let owner = wallet.owner().expect("wallet has key");
             save_wallet(&wallet, wallet_path, &password);
             println!("Wallet created and saved to {}", wallet_path.display());
             println!("Owner: {}", hex::encode(owner.to_repr()));
+            println!();
+            println!("BACKUP YOUR MNEMONIC PHRASE (24 words):");
+            println!("  {}", mnemonic);
+            println!();
+            eprintln!("WARNING: Write this down and store it securely. It is the ONLY way to recover your wallet.");
         }
         Commands::Import { mnemonic } => {
             if wallet_path.exists() {
@@ -211,6 +217,7 @@ async fn main() {
             let sk = wallet.spending_key().expect("wallet has key");
             println!("Spending key (hex): {}", hex::encode(sk.inner().to_repr()));
             eprintln!("WARNING: Keep this secret. Anyone with this key can spend your funds.");
+            eprintln!("TIP: If your wallet was created with `init`, use the mnemonic phrase shown at creation time for recovery via `import`.");
         }
         Commands::Info => {
             let wallet = load_wallet(wallet_path);

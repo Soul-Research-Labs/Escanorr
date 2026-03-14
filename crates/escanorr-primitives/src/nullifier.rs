@@ -50,11 +50,9 @@ impl<'de> serde::Deserialize<'de> for Nullifier {
         let bytes = hex::decode(&s).map_err(serde::de::Error::custom)?;
         let arr: [u8; 32] = bytes.try_into().map_err(|_| serde::de::Error::custom("expected 32 bytes"))?;
         let base = pallas::Base::from_repr(arr);
-        if bool::from(base.is_some()) {
-            Ok(Nullifier(base.unwrap()))
-        } else {
-            Err(serde::de::Error::custom("invalid field element"))
-        }
+        Option::from(base)
+            .map(Nullifier)
+            .ok_or_else(|| serde::de::Error::custom("invalid field element"))
     }
 }
 

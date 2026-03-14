@@ -56,6 +56,7 @@ contract PrivacyPool {
 
     uint256 public constant TREE_DEPTH = 32;
     uint256 public constant MAX_DEPOSIT = 100 ether;
+    uint256 public constant ROOT_HISTORY_SIZE = 100;
 
     // ──────────────────────────────────────────────────────────────────
     // State
@@ -69,6 +70,12 @@ contract PrivacyPool {
 
     /// @notice Historical roots — valid for withdrawals within a window
     mapping(bytes32 => bool) public knownRoots;
+
+    /// @notice Circular buffer of recent roots for bounded storage
+    bytes32[100] public rootHistory;
+
+    /// @notice Next write index into rootHistory (wraps at ROOT_HISTORY_SIZE)
+    uint256 public rootHistoryIndex;
 
     /// @notice Number of leaves (commitments) inserted
     uint256 public leafCount;
@@ -155,7 +162,7 @@ contract PrivacyPool {
         // Insert into the on-chain incremental Merkle tree
         merkleTree.insert(commitment);
         currentRoot = merkleTree.getRoot();
-        knownRoots[currentRoot] = true;
+        _recordRoot(currentRoot);
 
         emit Deposit(commitment, leafIndex, msg.value, block.timestamp);
     }
@@ -165,8 +172,21 @@ contract PrivacyPool {
     /// @param newRoot The new Merkle root
     function updateMerkleRoot(bytes32 newRoot) external onlyOwner {
         currentRoot = newRoot;
-        knownRoots[newRoot] = true;
+        _recordRoot(newRoot);
         emit MerkleRootUpdated(newRoot, leafCount);
+    }
+
+    /// @dev Record a new root, evicting the oldest if the ring buffer is full.
+    function _recordRoot(bytes32 newRoot) internal {
+        // Evict the oldest root from the mapping
+        bytes32 evicted = rootHistory[rootHistoryIndex];
+        if (evicted != bytes32(0)) {
+            delete knownRoots[evicted];
+        }
+        // Store the new root
+        rootHistory[rootHistoryIndex] = newRoot;
+        knownRoots[newRoot] = true;
+        rootHistoryIndex = (rootHistoryIndex + 1) % ROOT_HISTORY_SIZE;
     }
 
     // ──────────────────────────────────────────────────────────────────

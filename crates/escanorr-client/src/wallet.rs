@@ -3,6 +3,7 @@
 use escanorr_note::{SpendingKey, FullViewingKey, Note, NoteCommitment};
 use escanorr_primitives::Base;
 use ff::PrimeField;
+use rand::RngCore;
 use thiserror::Error;
 
 /// Wallet errors.
@@ -71,6 +72,25 @@ impl Wallet {
             fvk: Some(fvk),
             notes: Vec::new(),
         })
+    }
+
+    /// Generate a new random BIP39 mnemonic and derive a wallet from it.
+    /// Returns `(wallet, mnemonic_phrase)`.
+    pub fn from_new_mnemonic() -> (Self, String) {
+        let mut entropy = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut entropy);
+        let mnemonic = bip39::Mnemonic::from_entropy(&entropy)
+            .expect("valid 32-byte entropy for 24-word mnemonic");
+        let phrase = mnemonic.to_string();
+        let seed = mnemonic.to_seed("");
+        let sk = SpendingKey::from_seed(&seed[..32]);
+        let fvk = sk.to_full_viewing_key();
+        let wallet = Self {
+            spending_key: Some(sk),
+            fvk: Some(fvk),
+            notes: Vec::new(),
+        };
+        (wallet, phrase)
     }
 
     /// Get the spending key.
@@ -292,10 +312,9 @@ impl Wallet {
             .try_into()
             .map_err(|_| WalletError::Decryption)?;
         let scalar = pasta_curves::pallas::Scalar::from_repr(arr);
-        if bool::from(scalar.is_none()) {
-            return Err(WalletError::Decryption);
-        }
-        let sk = SpendingKey::from_scalar(scalar.unwrap());
+        let sk = SpendingKey::from_scalar(
+            Option::from(scalar).ok_or(WalletError::Decryption)?,
+        );
         let fvk = sk.to_full_viewing_key();
 
         let notes = data
