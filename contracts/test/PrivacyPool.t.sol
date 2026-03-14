@@ -279,7 +279,11 @@ contract PrivacyPoolTest is Test {
     // Withdraw: input validation
     // ──────────────────────────────────────────────────────────────────
 
-    function _dummyProof() internal pure returns (Groth16Verifier.Proof memory) {
+    function _dummyProof()
+        internal
+        pure
+        returns (Groth16Verifier.Proof memory)
+    {
         return
             Groth16Verifier.Proof({
                 a_x: 1,
@@ -311,7 +315,13 @@ contract PrivacyPoolTest is Test {
         bytes32 root = pool.currentRoot();
 
         vm.expectRevert(PrivacyPool.InvalidRecipient.selector);
-        pool.withdraw(_dummyProof(), root, bytes32(uint256(1)), address(0), 1 ether);
+        pool.withdraw(
+            _dummyProof(),
+            root,
+            bytes32(uint256(1)),
+            address(0),
+            1 ether
+        );
     }
 
     function test_withdraw_reverts_zero_nullifier() public {
