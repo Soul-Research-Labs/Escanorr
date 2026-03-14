@@ -89,12 +89,12 @@ No production-grade Zcash ↔ EVM bridge exists. Zcash's privacy is single-chain
 | **escanorr-prover**     | Proof generation with Halo2 IPA backend, sealed proof envelopes                                                                 |
 | **escanorr-verifier**   | Proof verification with Halo2 IPA backend                                                                                       |
 | **escanorr-contracts**  | Privacy pool state machine — deposits, withdrawals, transfers, epoch/nullifier tracking                                         |
-| **escanorr-node**       | Prover daemon state coordinator — transaction recording, pool management                                                        |
+| **escanorr-node**       | Prover daemon state coordinator — transaction recording, pool management, batch accumulator, sled persistence                    |
 | **escanorr-client**     | Wallet with BIP39 key derivation, note tracking, greedy coin selection, AES-256-GCM encrypted persistence                       |
-| **escanorr-bridge**     | Cross-chain adapter trait with chain support: Zcash, Horizen, Komodo, Pirate Chain, Ethereum, Polygon, Arbitrum, Optimism, Base |
-| **escanorr-sdk**        | High-level orchestrator — deposit, send, balance operations                                                                     |
-| **escanorr-rpc**        | Axum HTTP server with health, info, deposit, transfer endpoints, per-IP rate limiting, structured tracing                       |
-| **escanorr-cli**        | CLI binary — serve, init, info, deposit, balance, withdraw, transfer, bridge subcommands with encrypted wallet                  |
+| **escanorr-bridge**     | Cross-chain adapter trait with retry logic: Zcash, Horizen, Komodo, Pirate Chain, Ethereum, Polygon, Arbitrum, Optimism, Base   |
+| **escanorr-sdk**        | High-level orchestrator — deposit, send, withdraw, bridge with async prover                                                     |
+| **escanorr-rpc**        | Axum HTTP server — 9 endpoints, per-IP rate limiting, Prometheus metrics, structured tracing                                    |
+| **escanorr-cli**        | CLI binary — serve, init, import, export, info, deposit, balance, withdraw, transfer, bridge, history subcommands               |
 
 ---
 
@@ -160,6 +160,15 @@ cargo run --release --bin escanorr-cli -- withdraw --value 25 --fee 1
 
 # Cross-chain bridge
 cargo run --release --bin escanorr-cli -- bridge --dest-chain-id 137
+
+# Import wallet from mnemonic
+cargo run --release --bin escanorr-cli -- import
+
+# Export spending key for backup
+cargo run --release --bin escanorr-cli -- export
+
+# View recent transaction history
+cargo run --release --bin escanorr-cli -- history --count 50
 ```
 
 ---
@@ -271,7 +280,8 @@ escanorr/
 ├── tests/                      # Integration tests
 ├── benches/                    # Benchmarks
 ├── fuzz/                       # Fuzz targets
-└── deploy/                     # Deployment configs
+├── deploy/                     # Helm chart & Kubernetes configs
+└── Dockerfile                  # Multi-stage production image
 ```
 
 ---
@@ -286,8 +296,8 @@ Before deploying with real funds, complete every item below:
 - [ ] **Recursive proof wrapping** — Complete the `snark-verifier` integration in `EvmAdapter::submit()` (currently returns `EvmWrappingNotImplemented`)
 - [ ] **On-chain Merkle tree depth** — Verify the depth-32 IncrementalMerkleTree gas profile meets target chain block limits
 - [ ] **Key management** — Hardware-backed key storage for relayer signing keys and contract admin keys
-- [x] **Rate limiting** — Per-IP sliding-window rate limiter (60 req/min) deployed on the RPC server (128 KiB body limit)
-- [ ] **Monitoring** — Prometheus metrics export with alerting on nullifier-set growth, pool balance, and proof generation latency
+- [x] **Rate limiting** — Per-IP sliding-window rate limiter (60 req/min) with exempt IPs, deployed on the RPC server (128 KiB body limit)
+- [x] **Monitoring** — Prometheus metrics on `/metrics` (deposits, transfers, withdrawals, bridge locks, tree size, epoch, nullifier count)
 - [ ] **Incident response** — Emergency pause procedures tested; owner multisig deployed
 - [ ] **Fuzz testing** — Run `cargo fuzz` targets for extended duration (current CI only compile-checks)
 
@@ -314,6 +324,19 @@ at your option.
 
 ---
 
+## Documentation
+
+- [RPC API Reference](docs/guides/api.md) — All 9 HTTP endpoints with request/response schemas
+- [Deployment Guide](docs/guides/deployment.md) — Docker, Helm, and Kubernetes setup
+- [Groth16 Setup Guide](docs/guides/groth16-setup.md) — Trusted setup ceremony
+- [ADR-001: Halo2 IPA](docs/adr/001-halo2-ipa-pallas-vesta.md) — Proving system choice
+- [ADR-002: Domain Nullifiers](docs/adr/002-domain-separated-nullifiers.md) — Cross-chain nullifier design
+- [ADR-003: Recursive Wrapping](docs/adr/003-recursive-proof-wrapping.md) — EVM proof wrapping
+- [ADR-004: Proof Envelopes](docs/adr/004-fixed-size-proof-envelopes.md) — Side-channel resistant format
+- [ADR-005: Bridge Architecture](docs/adr/005-bridge-relayer-architecture.md) — Relayer design
+
+---
+
 ## Contributing
 
 Contributions are welcome. Please open an issue first to discuss what you'd like to change.
@@ -329,6 +352,9 @@ cargo clippy --workspace --all-targets
 
 # Run all tests
 cargo test --workspace
+
+# Run Solidity tests
+cd contracts && forge test -vvv
 
 # Build docs
 cargo doc --workspace --no-deps --open
