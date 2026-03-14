@@ -30,17 +30,22 @@ contract BridgeVaultTest is Test {
 
     // ─── Helpers ──────────────────────────────────────────────────────
 
-    function _dummyProof() internal pure returns (Groth16Verifier.Proof memory) {
-        return Groth16Verifier.Proof({
-            a_x: 1,
-            a_y: 2,
-            b_x1: 1,
-            b_x2: 1,
-            b_y1: 1,
-            b_y2: 1,
-            c_x: 1,
-            c_y: 2
-        });
+    function _dummyProof()
+        internal
+        pure
+        returns (Groth16Verifier.Proof memory)
+    {
+        return
+            Groth16Verifier.Proof({
+                a_x: 1,
+                a_y: 2,
+                b_x1: 1,
+                b_x2: 1,
+                b_y1: 1,
+                b_y2: 1,
+                c_x: 1,
+                c_y: 2
+            });
     }
 
     // ─── Initial State ───────────────────────────────────────────────
@@ -145,13 +150,7 @@ contract BridgeVaultTest is Test {
     function test_unlock_reverts_when_paused() public {
         vault.pause();
         vm.expectRevert(BridgeVault.VaultPaused.selector);
-        vault.unlock(
-            _dummyProof(),
-            bytes32(uint256(1)),
-            user,
-            1 ether,
-            42
-        );
+        vault.unlock(_dummyProof(), bytes32(uint256(1)), user, 1 ether, 42);
     }
 
     function test_unlock_reverts_zero_recipient() public {
@@ -167,24 +166,12 @@ contract BridgeVaultTest is Test {
 
     function test_unlock_reverts_zero_nullifier() public {
         vm.expectRevert(BridgeVault.InvalidNullifier.selector);
-        vault.unlock(
-            _dummyProof(),
-            bytes32(0),
-            user,
-            1 ether,
-            42
-        );
+        vault.unlock(_dummyProof(), bytes32(0), user, 1 ether, 42);
     }
 
     function test_unlock_reverts_zero_amount() public {
         vm.expectRevert(BridgeVault.InvalidAmount.selector);
-        vault.unlock(
-            _dummyProof(),
-            bytes32(uint256(1)),
-            user,
-            0,
-            42
-        );
+        vault.unlock(_dummyProof(), bytes32(uint256(1)), user, 0, 42);
     }
 
     function test_unlock_reverts_same_chain() public {
@@ -201,24 +188,12 @@ contract BridgeVaultTest is Test {
     function test_unlock_reverts_insufficient_balance() public {
         // Vault has 50 ether; requesting more should fail with InsufficientBalance
         vm.expectRevert(BridgeVault.InsufficientBalance.selector);
-        vault.unlock(
-            _dummyProof(),
-            bytes32(uint256(1)),
-            user,
-            100 ether,
-            42
-        );
+        vault.unlock(_dummyProof(), bytes32(uint256(1)), user, 100 ether, 42);
     }
 
     function test_unlock_reverts_invalid_proof() public {
         // With placeholder VK, proof verification fails
         vm.expectRevert();
-        vault.unlock(
-            _dummyProof(),
-            bytes32(uint256(1)),
-            user,
-            1 ether,
-            42
-        );
+        vault.unlock(_dummyProof(), bytes32(uint256(1)), user, 1 ether, 42);
     }
 }
