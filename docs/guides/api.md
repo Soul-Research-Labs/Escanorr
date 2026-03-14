@@ -15,6 +15,7 @@ Proofs are hex-encoded 32 KiB proof envelopes (65536 hex chars).
 Returns server health status.
 
 **Response**
+
 ```json
 {
   "status": "ok",
@@ -29,6 +30,7 @@ Returns server health status.
 Returns current node state summary.
 
 **Response**
+
 ```json
 {
   "epoch": 5,
@@ -44,6 +46,7 @@ Returns current node state summary.
 Returns the current Merkle tree root.
 
 **Response**
+
 ```json
 {
   "root": "0a1b2c...64 hex chars"
@@ -57,6 +60,7 @@ Returns the current Merkle tree root.
 Insert a note commitment into the privacy pool.
 
 **Request**
+
 ```json
 {
   "commitment": "0a1b2c...64 hex chars",
@@ -65,6 +69,7 @@ Insert a note commitment into the privacy pool.
 ```
 
 **Response** `200 OK`
+
 ```json
 {
   "index": 42,
@@ -85,6 +90,7 @@ Insert a note commitment into the privacy pool.
 Submit a private transfer with ZK proof verification.
 
 **Request**
+
 ```json
 {
   "nullifiers": ["aabb...64 hex", "ccdd...64 hex"],
@@ -110,6 +116,7 @@ Submit a private transfer with ZK proof verification.
 Withdraw from the privacy pool with ZK proof.
 
 **Request**
+
 ```json
 {
   "nullifier": "aabb...64 hex",
@@ -121,6 +128,7 @@ Withdraw from the privacy pool with ZK proof.
 ```
 
 **Response** `200 OK`
+
 ```json
 {
   "nullifier": "aabb...64 hex",
@@ -142,9 +150,11 @@ Withdraw from the privacy pool with ZK proof.
 Check whether a nullifier has been spent.
 
 **Parameters**
+
 - `:nf` — 64-character hex nullifier
 
 **Response**
+
 ```json
 {
   "spent": true
@@ -158,6 +168,7 @@ Check whether a nullifier has been spent.
 Lock a note for cross-chain bridging with ZK proof.
 
 **Request**
+
 ```json
 {
   "nullifier": "aabb...64 hex",
@@ -171,6 +182,7 @@ Lock a note for cross-chain bridging with ZK proof.
 ```
 
 **Response** `200 OK`
+
 ```json
 {
   "nullifier": "aabb...64 hex",
@@ -192,9 +204,11 @@ Lock a note for cross-chain bridging with ZK proof.
 Check the status of a bridge operation by its nullifier.
 
 **Parameters**
+
 - `:nf` — 64-character hex nullifier
 
 **Response**
+
 ```json
 {
   "nullifier": "aabb...64 hex",
@@ -210,16 +224,16 @@ Status values: `"pending"` (nullifier not yet seen) or `"confirmed"` (nullifier 
 
 Prometheus-formatted metrics. Available counters and gauges:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `deposits_total` | Counter | Total deposits processed |
-| `transfers_total` | Counter | Total transfers processed |
-| `withdrawals_total` | Counter | Total withdrawals processed |
-| `bridge_locks_total` | Counter | Total bridge locks processed |
-| `proof_verification_failures` | Counter | Failed proof verifications |
-| `tree_size` | Gauge | Current Merkle tree leaf count |
-| `epoch` | Gauge | Current epoch number |
-| `nullifier_count` | Gauge | Spent nullifiers tracked |
+| Metric                        | Type    | Description                    |
+| ----------------------------- | ------- | ------------------------------ |
+| `deposits_total`              | Counter | Total deposits processed       |
+| `transfers_total`             | Counter | Total transfers processed      |
+| `withdrawals_total`           | Counter | Total withdrawals processed    |
+| `bridge_locks_total`          | Counter | Total bridge locks processed   |
+| `proof_verification_failures` | Counter | Failed proof verifications     |
+| `tree_size`                   | Gauge   | Current Merkle tree leaf count |
+| `epoch`                       | Gauge   | Current epoch number           |
+| `nullifier_count`             | Gauge   | Spent nullifiers tracked       |
 
 ---
 

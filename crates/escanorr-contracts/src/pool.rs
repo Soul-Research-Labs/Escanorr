@@ -60,6 +60,35 @@ use std::collections::VecDeque;
 /// Proofs referencing a root older than this are rejected.
 const MAX_ROOT_HISTORY: usize = 100;
 
+/// Serde helper for `VecDeque<Base>` — stores as `Vec<[u8; 32]>` (repr bytes).
+mod root_history_serde {
+    use super::*;
+    use ff::PrimeField;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(
+        roots: &VecDeque<Base>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        let bytes: Vec<[u8; 32]> = roots.iter().map(|r| r.to_repr()).collect();
+        bytes.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<VecDeque<Base>, D::Error> {
+        let bytes: Vec<[u8; 32]> = Vec::deserialize(deserializer)?;
+        bytes
+            .into_iter()
+            .map(|b| {
+                Base::from_repr(b)
+                    .into_option()
+                    .ok_or_else(|| serde::de::Error::custom("invalid field element in root history"))
+            })
+            .collect()
+    }
+}
+
 /// The privacy pool state machine.
 #[derive(Serialize, Deserialize)]
 pub struct PrivacyPool {
@@ -68,7 +97,7 @@ pub struct PrivacyPool {
     /// Historical Merkle roots (most-recent last). The current root
     /// is always the last entry. Roots older than MAX_ROOT_HISTORY
     /// entries are pruned and considered expired.
-    #[serde(skip, default)]
+    #[serde(with = "root_history_serde", default)]
     known_roots: VecDeque<Base>,
     /// Epoch counter.
     pub epoch: u64,
@@ -113,6 +142,9 @@ impl PrivacyPool {
 
     /// Process a deposit: insert commitment into the Merkle tree.
     pub fn deposit(&mut self, req: DepositRequest) -> Result<u64, PoolError> {
+        if self.tree.size() >= (1u64 << escanorr_tree::TREE_DEPTH) {
+            return Err(PoolError::TreeFull);
+        }
         let index = self.tree.insert(req.commitment);
         self.total_deposited = self
             .total_deposited

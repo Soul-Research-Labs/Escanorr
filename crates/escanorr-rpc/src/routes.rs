@@ -338,7 +338,9 @@ pub async fn get_bridge_status(
 }
 
 /// GET /metrics — Prometheus metrics endpoint.
-pub async fn get_metrics(State(state): State<AppState>) -> String {
+pub async fn get_metrics(
+    State(state): State<AppState>,
+) -> ([(axum::http::header::HeaderName, &'static str); 1], String) {
     // Update gauge values from current node state
     let node = state.node.read().await;
     state.metrics.tree_size.set(node.pool().tree_size() as i64);
@@ -346,5 +348,8 @@ pub async fn get_metrics(State(state): State<AppState>) -> String {
     state.metrics.nullifier_count.set(node.pool().nullifier_set().len() as i64);
     drop(node);
 
-    state.metrics.encode()
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        state.metrics.encode(),
+    )
 }

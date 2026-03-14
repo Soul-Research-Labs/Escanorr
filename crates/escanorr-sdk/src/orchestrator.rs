@@ -32,6 +32,8 @@ pub enum SdkError {
     TooManyInputs(usize),
     #[error("no single note covers the required amount; consolidate first")]
     NeedConsolidation,
+    #[error("prover not initialized; call init_prover() or init_prover_async() first")]
+    ProverNotInitialized,
 }
 
 /// Result of a private transfer.
@@ -267,7 +269,7 @@ impl Escanorr {
 
         // Public inputs: [root, nf_0, nf_1, out_cm_0, out_cm_1]
         let public_inputs = vec![root, nf_0, nf_1, out_cm_0, out_cm_1];
-        let params = self.prover_params.as_ref().unwrap();
+        let params = self.prover_params.as_ref().ok_or(SdkError::ProverNotInitialized)?;
         let envelope = prove_transfer(params, circuit, &[&public_inputs])
             .map_err(|e| SdkError::Proof(format!("{e}")))?;
 
@@ -361,7 +363,7 @@ impl Escanorr {
 
         // Public inputs: [root, nullifier, change_cm, exit_value]
         let public_inputs = vec![root, nf, chg_cm, pallas::Base::from(exit_value)];
-        let params = self.prover_params.as_ref().unwrap();
+        let params = self.prover_params.as_ref().ok_or(SdkError::ProverNotInitialized)?;
         let envelope = prove_withdraw(params, circuit, &[&public_inputs])
             .map_err(|e| SdkError::Proof(format!("{e}")))?;
 
@@ -460,7 +462,7 @@ impl Escanorr {
             pallas::Base::from(src_chain_id),
             pallas::Base::from(dest_chain_id),
         ];
-        let params = self.prover_params.as_ref().unwrap();
+        let params = self.prover_params.as_ref().ok_or(SdkError::ProverNotInitialized)?;
         let envelope = prove_bridge(params, circuit, &[&public_inputs])
             .map_err(|e| SdkError::Proof(format!("{e}")))?;
 

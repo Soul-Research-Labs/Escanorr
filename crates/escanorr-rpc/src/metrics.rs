@@ -11,6 +11,18 @@ use prometheus::{
     opts,
 };
 
+/// Errors from metrics initialization.
+#[derive(Debug)]
+pub struct MetricsError(pub String);
+
+impl std::fmt::Display for MetricsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "metrics initialization failed: {}", self.0)
+    }
+}
+
+impl std::error::Error for MetricsError {}
+
 /// Application-level metrics.
 #[derive(Clone)]
 pub struct Metrics {
@@ -33,88 +45,90 @@ pub struct Metrics {
 
 impl Metrics {
     /// Create a new metrics registry with all counters/gauges registered.
-    pub fn new() -> Self {
+    ///
+    /// Returns an error if any metric fails to register (e.g. duplicate names).
+    pub fn new() -> Result<Self, MetricsError> {
         let registry = Registry::new();
 
         let deposits_total = IntCounter::with_opts(opts!(
             "escanorr_deposits_total",
             "Total number of deposits processed"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let transfers_total = IntCounter::with_opts(opts!(
             "escanorr_transfers_total",
             "Total number of transfers processed"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let withdrawals_total = IntCounter::with_opts(opts!(
             "escanorr_withdrawals_total",
             "Total number of withdrawals processed"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let bridge_locks_total = IntCounter::with_opts(opts!(
             "escanorr_bridge_locks_total",
             "Total number of bridge lock operations"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let rate_limit_rejections = IntCounter::with_opts(opts!(
             "escanorr_rate_limit_rejections_total",
             "Total number of rate-limited requests"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let proof_verification_failures = IntCounter::with_opts(opts!(
             "escanorr_proof_verification_failures_total",
             "Total number of failed proof verifications"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let tree_size = IntGauge::with_opts(opts!(
             "escanorr_tree_size",
             "Current Merkle tree leaf count"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let epoch = IntGauge::with_opts(opts!(
             "escanorr_epoch",
             "Current pool epoch"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let nullifier_count = IntGauge::with_opts(opts!(
             "escanorr_nullifier_count",
             "Number of spent nullifiers"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let pool_balance = IntGauge::with_opts(opts!(
             "escanorr_pool_balance",
             "Total pool balance (sum of deposit values)"
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
         let request_duration_seconds = Histogram::with_opts(HistogramOpts::new(
             "escanorr_request_duration_seconds",
             "HTTP request duration in seconds",
         ))
-        .unwrap();
+        .map_err(|e| MetricsError(e.to_string()))?;
 
-        registry.register(Box::new(deposits_total.clone())).unwrap();
-        registry.register(Box::new(transfers_total.clone())).unwrap();
-        registry.register(Box::new(withdrawals_total.clone())).unwrap();
-        registry.register(Box::new(bridge_locks_total.clone())).unwrap();
-        registry.register(Box::new(rate_limit_rejections.clone())).unwrap();
-        registry.register(Box::new(proof_verification_failures.clone())).unwrap();
-        registry.register(Box::new(tree_size.clone())).unwrap();
-        registry.register(Box::new(epoch.clone())).unwrap();
-        registry.register(Box::new(nullifier_count.clone())).unwrap();
-        registry.register(Box::new(pool_balance.clone())).unwrap();
-        registry.register(Box::new(request_duration_seconds.clone())).unwrap();
+        registry.register(Box::new(deposits_total.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(transfers_total.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(withdrawals_total.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(bridge_locks_total.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(rate_limit_rejections.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(proof_verification_failures.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(tree_size.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(epoch.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(nullifier_count.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(pool_balance.clone())).map_err(|e| MetricsError(e.to_string()))?;
+        registry.register(Box::new(request_duration_seconds.clone())).map_err(|e| MetricsError(e.to_string()))?;
 
-        Self {
+        Ok(Self {
             registry,
             deposits_total,
             transfers_total,
@@ -127,7 +141,7 @@ impl Metrics {
             nullifier_count,
             pool_balance,
             request_duration_seconds,
-        }
+        })
     }
 
     /// Encode metrics to Prometheus text format for the /metrics endpoint.
@@ -137,11 +151,5 @@ impl Metrics {
         let mut buffer = Vec::new();
         encoder.encode(&metric_families, &mut buffer).unwrap();
         String::from_utf8(buffer).unwrap()
-    }
-}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -80,21 +80,21 @@ No production-grade Zcash ↔ EVM bridge exists. Zcash's privacy is single-chain
 
 ## Crates
 
-| Crate                   | Description                                                                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **escanorr-primitives** | Field types (Pallas/Vesta), Poseidon hash, domain-separated nullifiers, proof envelopes                                         |
-| **escanorr-note**       | UTXO note model, key hierarchy (spending/viewing/full), ChaCha20-Poly1305 encryption, stealth addresses                         |
-| **escanorr-tree**       | Append-only incremental Merkle tree (depth 32, Poseidon)                                                                        |
-| **escanorr-circuits**   | Halo2 ZK circuits — transfer (2-in-2-out), withdraw, bridge (chain-ID distinctness)                                             |
-| **escanorr-prover**     | Proof generation with Halo2 IPA backend, sealed proof envelopes                                                                 |
-| **escanorr-verifier**   | Proof verification with Halo2 IPA backend                                                                                       |
-| **escanorr-contracts**  | Privacy pool state machine — deposits, withdrawals, transfers, epoch/nullifier tracking                                         |
-| **escanorr-node**       | Prover daemon state coordinator — transaction recording, pool management, batch accumulator, sled persistence                    |
-| **escanorr-client**     | Wallet with BIP39 key derivation, note tracking, greedy coin selection, AES-256-GCM encrypted persistence                       |
-| **escanorr-bridge**     | Cross-chain adapter trait with retry logic: Zcash, Horizen, Komodo, Pirate Chain, Ethereum, Polygon, Arbitrum, Optimism, Base   |
-| **escanorr-sdk**        | High-level orchestrator — deposit, send, withdraw, bridge with async prover                                                     |
-| **escanorr-rpc**        | Axum HTTP server — 9 endpoints, per-IP rate limiting, Prometheus metrics, structured tracing                                    |
-| **escanorr-cli**        | CLI binary — serve, init, import, export, info, deposit, balance, withdraw, transfer, bridge, history subcommands               |
+| Crate                   | Description                                                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **escanorr-primitives** | Field types (Pallas/Vesta), Poseidon hash, domain-separated nullifiers, proof envelopes                                       |
+| **escanorr-note**       | UTXO note model, key hierarchy (spending/viewing/full), ChaCha20-Poly1305 encryption, stealth addresses                       |
+| **escanorr-tree**       | Append-only incremental Merkle tree (depth 32, Poseidon)                                                                      |
+| **escanorr-circuits**   | Halo2 ZK circuits — transfer (2-in-2-out), withdraw, bridge (chain-ID distinctness)                                           |
+| **escanorr-prover**     | Proof generation with Halo2 IPA backend, sealed proof envelopes                                                               |
+| **escanorr-verifier**   | Proof verification with Halo2 IPA backend                                                                                     |
+| **escanorr-contracts**  | Privacy pool state machine — deposits, withdrawals, transfers, epoch/nullifier tracking                                       |
+| **escanorr-node**       | Prover daemon state coordinator — transaction recording, pool management, batch accumulator, sled persistence                 |
+| **escanorr-client**     | Wallet with BIP39 key derivation, note tracking, greedy coin selection, AES-256-GCM encrypted persistence                     |
+| **escanorr-bridge**     | Cross-chain adapter trait with retry logic: Zcash, Horizen, Komodo, Pirate Chain, Ethereum, Polygon, Arbitrum, Optimism, Base |
+| **escanorr-sdk**        | High-level orchestrator — deposit, send, withdraw, bridge with async prover                                                   |
+| **escanorr-rpc**        | Axum HTTP server — 9 endpoints, per-IP rate limiting, Prometheus metrics, structured tracing                                  |
+| **escanorr-cli**        | CLI binary — serve, init, import, export, info, deposit, balance, withdraw, transfer, bridge, history subcommands             |
 
 ---
 

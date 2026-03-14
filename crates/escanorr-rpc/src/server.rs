@@ -32,12 +32,22 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
     let state: AppState = Arc::new(SharedState {
         node: RwLock::new(NodeState::new()),
         verifier,
-        metrics: Metrics::new(),
+        metrics: Metrics::new()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("metrics init failed: {e}")))?,
     });
 
+    let max_requests: u32 = std::env::var("ESCANORR_RATE_LIMIT_REQUESTS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60);
+    let window_secs: u64 = std::env::var("ESCANORR_RATE_LIMIT_WINDOW_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60);
+
     let limiter = RateLimiter::new(RateLimitConfig {
-        max_requests: 60,
-        window: Duration::from_secs(60),
+        max_requests,
+        window: Duration::from_secs(window_secs),
         ..Default::default()
     });
 
@@ -74,7 +84,7 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    info!("ESCANORR RPC server listening on {} (rate limit: 60 req/min per IP)", addr);
+    info!("ESCANORR RPC server listening on {} (rate limit: {} req/{} sec per IP)", addr, max_requests, window_secs);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(
