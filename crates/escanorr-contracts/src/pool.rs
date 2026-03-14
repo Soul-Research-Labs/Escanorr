@@ -13,6 +13,8 @@ pub enum PoolError {
     DoubleSpend,
     #[error("invalid Merkle root")]
     InvalidRoot,
+    #[error("Merkle root expired (too many epochs old)")]
+    RootExpired,
     #[error("value overflow")]
     Overflow,
     #[error("tree is full")]
@@ -52,11 +54,22 @@ pub struct TransferRequest {
     pub output_commitments: Vec<Base>,
 }
 
+use std::collections::VecDeque;
+
+/// Maximum number of historical roots to retain.
+/// Proofs referencing a root older than this are rejected.
+const MAX_ROOT_HISTORY: usize = 100;
+
 /// The privacy pool state machine.
 #[derive(Serialize, Deserialize)]
 pub struct PrivacyPool {
     tree: IncrementalMerkleTree,
     nullifiers: NullifierSet,
+    /// Historical Merkle roots (most-recent last). The current root
+    /// is always the last entry. Roots older than MAX_ROOT_HISTORY
+    /// entries are pruned and considered expired.
+    #[serde(skip, default)]
+    known_roots: VecDeque<Base>,
     /// Epoch counter.
     pub epoch: u64,
     /// Total deposited value (for accounting).
@@ -68,9 +81,14 @@ pub struct PrivacyPool {
 impl PrivacyPool {
     /// Create a new empty privacy pool.
     pub fn new() -> Self {
+        let tree = IncrementalMerkleTree::new();
+        let initial_root = tree.root();
+        let mut known_roots = VecDeque::with_capacity(MAX_ROOT_HISTORY);
+        known_roots.push_back(initial_root);
         Self {
-            tree: IncrementalMerkleTree::new(),
+            tree,
             nullifiers: NullifierSet::new(),
+            known_roots,
             epoch: 0,
             total_deposited: 0,
             total_withdrawn: 0,
@@ -100,13 +118,14 @@ impl PrivacyPool {
             .total_deposited
             .checked_add(req.value as u128)
             .ok_or(PoolError::Overflow)?;
+        self.record_root();
         Ok(index)
     }
 
     /// Process a withdrawal: check nullifier, optionally insert change commitment.
     pub fn withdraw(&mut self, req: WithdrawRequest) -> Result<(), PoolError> {
-        // Verify Merkle root
-        if self.tree.root() != req.merkle_root {
+        // Verify Merkle root is known (not expired)
+        if !self.is_known_root(req.merkle_root) {
             return Err(PoolError::InvalidRoot);
         }
 
@@ -125,13 +144,14 @@ impl PrivacyPool {
             .checked_add(req.exit_value as u128)
             .ok_or(PoolError::Overflow)?;
 
+        self.record_root();
         Ok(())
     }
 
     /// Process a transfer: check nullifiers, insert output commitments.
     pub fn transfer(&mut self, req: TransferRequest) -> Result<(), PoolError> {
-        // Verify Merkle root
-        if self.tree.root() != req.merkle_root {
+        // Verify Merkle root is known (not expired)
+        if !self.is_known_root(req.merkle_root) {
             return Err(PoolError::InvalidRoot);
         }
 
@@ -147,6 +167,7 @@ impl PrivacyPool {
             self.tree.insert(*cm);
         }
 
+        self.record_root();
         Ok(())
     }
 
@@ -158,6 +179,21 @@ impl PrivacyPool {
     /// Get the nullifier set (for inspection/serialization).
     pub fn nullifier_set(&self) -> &NullifierSet {
         &self.nullifiers
+    }
+
+    /// Check whether `root` is in the recent history of known roots.
+    /// Returns `false` for expired or unknown roots.
+    pub fn is_known_root(&self, root: Base) -> bool {
+        self.known_roots.iter().any(|r| *r == root)
+    }
+
+    /// Record the current Merkle root in history, pruning old entries.
+    fn record_root(&mut self) {
+        let root = self.tree.root();
+        self.known_roots.push_back(root);
+        while self.known_roots.len() > MAX_ROOT_HISTORY {
+            self.known_roots.pop_front();
+        }
     }
 }
 
@@ -267,6 +303,52 @@ mod tests {
             nullifier: nf,
             merkle_root: fake_root,
             exit_value: 500,
+            change_commitment: None,
+        });
+        assert!(matches!(result, Err(PoolError::InvalidRoot)));
+    }
+
+    #[test]
+    fn recent_root_accepted_after_deposits() {
+        let mut pool = PrivacyPool::new();
+        let cm1 = pallas::Base::random(OsRng);
+        pool.deposit(DepositRequest { commitment: cm1, value: 100 }).unwrap();
+        let old_root = pool.root();
+
+        // Make a second deposit (changes the root)
+        let cm2 = pallas::Base::random(OsRng);
+        pool.deposit(DepositRequest { commitment: cm2, value: 200 }).unwrap();
+        assert_ne!(pool.root(), old_root);
+
+        // The old root should still be accepted (within history window)
+        let nf = pallas::Base::random(OsRng);
+        pool.withdraw(WithdrawRequest {
+            nullifier: nf,
+            merkle_root: old_root,
+            exit_value: 50,
+            change_commitment: None,
+        }).unwrap();
+    }
+
+    #[test]
+    fn expired_root_rejected() {
+        let mut pool = PrivacyPool::new();
+        let cm = pallas::Base::random(OsRng);
+        pool.deposit(DepositRequest { commitment: cm, value: 100 }).unwrap();
+        let old_root = pool.root();
+
+        // Do MAX_ROOT_HISTORY + 1 deposits to push old_root out of history
+        for i in 0..(super::MAX_ROOT_HISTORY + 1) {
+            let cm = pallas::Base::from(i as u64 + 1000);
+            pool.deposit(DepositRequest { commitment: cm, value: 1 }).unwrap();
+        }
+
+        // The old root should now be expired
+        let nf = pallas::Base::random(OsRng);
+        let result = pool.withdraw(WithdrawRequest {
+            nullifier: nf,
+            merkle_root: old_root,
+            exit_value: 50,
             change_commitment: None,
         });
         assert!(matches!(result, Err(PoolError::InvalidRoot)));
