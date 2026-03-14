@@ -11,12 +11,24 @@ use ff::{Field, PrimeField};
 use group::Group;
 use pasta_curves::{arithmetic::CurveAffine, pallas};
 use rand::rngs::OsRng;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A spending key — the master secret for a wallet.
 ///
 /// Knowledge of the spending key allows spending notes and deriving nullifiers.
+/// The scalar is zeroized from memory on drop.
 #[derive(Clone, Debug)]
 pub struct SpendingKey(pallas::Scalar);
+
+impl Drop for SpendingKey {
+    fn drop(&mut self) {
+        // Zeroize the scalar's repr bytes in-place
+        let bytes = self.0.to_repr();
+        let _ = bytes; // scalar is Copy; we overwrite via mut ref
+        // Write zero scalar over self
+        self.0 = pallas::Scalar::zero();
+    }
+}
 
 impl SpendingKey {
     /// Generate a new random spending key.

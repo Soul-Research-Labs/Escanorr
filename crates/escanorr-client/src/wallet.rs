@@ -165,6 +165,7 @@ use aes_gcm::{
 use argon2::Argon2;
 use serde::{Serialize, Deserialize};
 use std::path::Path;
+use zeroize::Zeroize;
 
 /// On-disk format: salt + nonce + ciphertext, all JSON-wrapped for simplicity.
 #[derive(Serialize, Deserialize)]
@@ -194,6 +195,7 @@ struct OwnedNoteData {
 }
 
 /// Derive a 32-byte AES key from a password and salt using Argon2id.
+/// The caller is responsible for zeroizing the returned key after use.
 fn derive_key(password: &[u8], salt: &[u8]) -> [u8; 32] {
     let mut key = [0u8; 32];
     Argon2::default()
@@ -232,8 +234,9 @@ impl Wallet {
         rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut salt);
         rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut nonce_bytes);
 
-        let key = derive_key(password, &salt);
+        let mut key = derive_key(password, &salt);
         let cipher = Aes256Gcm::new_from_slice(&key).expect("valid key size");
+        key.zeroize();
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let ciphertext = cipher
@@ -272,8 +275,9 @@ impl Wallet {
             return Err(WalletError::Decryption);
         }
 
-        let key = derive_key(password, &salt);
+        let mut key = derive_key(password, &salt);
         let cipher = Aes256Gcm::new_from_slice(&key).expect("valid key size");
+        key.zeroize();
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let plaintext = cipher

@@ -19,6 +19,7 @@ aes-gcm.workspace = true
 argon2.workspace = true
 rand.workspace = true
 bip39.workspace = true
+zeroize.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
