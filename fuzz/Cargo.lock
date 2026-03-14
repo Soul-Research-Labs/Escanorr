@@ -385,9 +385,10 @@ dependencies = [
  "ff",
  "group",
  "halo2_gadgets",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "pasta_curves",
  "rand",
+ "sha2",
  "thiserror",
 ]
 
@@ -446,6 +447,7 @@ dependencies = [
  "sha2",
  "subtle",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]
@@ -455,7 +457,7 @@ dependencies = [
  "ff",
  "group",
  "halo2_gadgets",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "hex",
  "pasta_curves",
  "rand",
@@ -473,7 +475,7 @@ dependencies = [
  "escanorr-circuits",
  "escanorr-primitives",
  "ff",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "pasta_curves",
  "rand",
  "thiserror",
@@ -500,7 +502,7 @@ dependencies = [
  "escanorr-circuits",
  "escanorr-primitives",
  "ff",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0)",
+ "halo2_proofs",
  "pasta_curves",
  "thiserror",
  "tracing",
@@ -695,7 +697,7 @@ dependencies = [
  "bitvec",
  "ff",
  "group",
- "halo2_proofs 0.3.0 (git+https://github.com/zcash/halo2.git?tag=halo2_gadgets-0.3.0)",
+ "halo2_proofs",
  "lazy_static",
  "pasta_curves",
  "rand",
@@ -707,20 +709,6 @@ dependencies = [
 name = "halo2_proofs"
 version = "0.3.0"
 source = "git+https://github.com/zcash/halo2.git?tag=halo2_gadgets-0.3.0#263356784042d7d4c1c17d357c94c1acaeb75ab5"
-dependencies = [
- "blake2b_simd",
- "ff",
- "group",
- "maybe-rayon",
- "pasta_curves",
- "rand_core",
- "tracing",
-]
-
-[[package]]
-name = "halo2_proofs"
-version = "0.3.0"
-source = "git+https://github.com/zcash/halo2.git?tag=halo2_proofs-0.3.0#263356784042d7d4c1c17d357c94c1acaeb75ab5"
 dependencies = [
  "blake2b_simd",
  "ff",
@@ -2510,6 +2498,20 @@ name = "zeroize"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85a5b4158499876c763cb03bc4e49185d3cccbabb15b33c627f7884f43db852e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "zerotrie"

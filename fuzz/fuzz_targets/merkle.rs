@@ -9,6 +9,7 @@ use pasta_curves::pallas;
 
 fuzz_target!(|data: &[u8]| {
     let mut tree = IncrementalMerkleTree::new();
+    let mut inserted_leaves = Vec::new();
 
     // Insert up to 64 leaves from fuzzer data (each leaf = 32 bytes)
     let num_leaves = data.len() / 32;
@@ -21,6 +22,7 @@ fuzz_target!(|data: &[u8]| {
         if let Some(leaf) = Option::from(pallas::Base::from_repr(leaf_bytes)) {
             let idx = tree.insert(leaf);
             assert_eq!(idx, i as u64);
+            inserted_leaves.push(leaf);
 
             // Auth path should exist for every inserted leaf
             let path = tree.auth_path(idx);
@@ -28,6 +30,22 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
-    // Root should be deterministic for same insertions
-    let _root = tree.root();
+    // Root consistency invariant: every inserted leaf's auth path must
+    // verify against the current root.
+    let root = tree.root();
+    for (i, leaf) in inserted_leaves.iter().enumerate() {
+        let (siblings, path_indices) = tree
+            .auth_path(i as u64)
+            .expect("auth_path must exist for inserted leaf");
+        assert!(
+            IncrementalMerkleTree::verify_proof(root, *leaf, &siblings, &path_indices),
+            "proof for leaf {} must verify against current root",
+            i,
+        );
+    }
+
+    // Out-of-bounds index should return None
+    if !inserted_leaves.is_empty() {
+        assert!(tree.auth_path(inserted_leaves.len() as u64).is_none());
+    }
 });
