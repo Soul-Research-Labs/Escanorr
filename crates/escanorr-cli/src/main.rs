@@ -39,6 +39,14 @@ enum Commands {
     },
     /// Create a new wallet and save it encrypted.
     Init,
+    /// Import a wallet from a BIP39 mnemonic phrase.
+    Import {
+        /// BIP39 mnemonic phrase (12 or 24 words). Prompted interactively if not given.
+        #[arg(short, long)]
+        mnemonic: Option<String>,
+    },
+    /// Export the wallet's BIP39-compatible spending key (hex) for backup.
+    Export,
     /// Show wallet info (owner address, balance).
     Info,
     /// Deposit funds into the privacy pool.
@@ -153,6 +161,44 @@ async fn main() {
             save_wallet(&wallet, wallet_path, &password);
             println!("Wallet created and saved to {}", wallet_path.display());
             println!("Owner: {}", hex::encode(owner.to_repr()));
+        }
+        Commands::Import { mnemonic } => {
+            if wallet_path.exists() {
+                eprintln!("Wallet already exists at {}. Delete it first to reimport.", wallet_path.display());
+                std::process::exit(1);
+            }
+            let phrase = match mnemonic {
+                Some(m) => m,
+                None => {
+                    eprint!("Enter BIP39 mnemonic: ");
+                    let mut buf = String::new();
+                    std::io::stdin().read_line(&mut buf).unwrap_or_else(|_| {
+                        eprintln!("Failed to read mnemonic");
+                        std::process::exit(1);
+                    });
+                    buf.trim().to_string()
+                }
+            };
+            let wallet = escanorr_client::Wallet::from_mnemonic(&phrase).unwrap_or_else(|e| {
+                eprintln!("Invalid mnemonic: {e}");
+                std::process::exit(1);
+            });
+            let owner = wallet.owner().expect("wallet has key");
+            let password = read_password("Choose wallet password: ");
+            let confirm = read_password("Confirm password: ");
+            if password != confirm {
+                eprintln!("Passwords do not match.");
+                std::process::exit(1);
+            }
+            save_wallet(&wallet, wallet_path, &password);
+            println!("Wallet imported and saved to {}", wallet_path.display());
+            println!("Owner: {}", hex::encode(owner.to_repr()));
+        }
+        Commands::Export => {
+            let wallet = load_wallet(wallet_path);
+            let sk = wallet.spending_key().expect("wallet has key");
+            println!("Spending key (hex): {}", hex::encode(sk.inner().to_repr()));
+            eprintln!("WARNING: Keep this secret. Anyone with this key can spend your funds.");
         }
         Commands::Info => {
             let wallet = load_wallet(wallet_path);
