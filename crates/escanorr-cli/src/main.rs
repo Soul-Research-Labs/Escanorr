@@ -134,7 +134,13 @@ fn save_wallet(wallet: &escanorr_client::Wallet, path: &std::path::Path, passwor
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "escanorr=info,tower_http=info".parse().unwrap()),
+        )
+        .with_target(true)
+        .init();
     let cli = Cli::parse();
     let wallet_path = &cli.wallet_file;
 
