@@ -14,5 +14,6 @@
 mod server;
 mod routes;
 pub mod rate_limit;
+pub mod metrics;
 
 pub use server::run_server;

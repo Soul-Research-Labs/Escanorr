@@ -9,12 +9,14 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
+use crate::metrics::Metrics;
 use escanorr_node::NodeState;
 
-/// Shared application state: mutable node + read-only verifier keys.
+/// Shared application state: mutable node + read-only verifier keys + metrics.
 pub struct SharedState {
     pub node: RwLock<NodeState>,
     pub verifier: VerifierParams,
+    pub metrics: Metrics,
 }
 
 pub type AppState = Arc<SharedState>;
@@ -180,6 +182,7 @@ pub async fn post_deposit(
         })?;
     let root = base_to_hex(&node.root());
     info!(index, value = body.value, "deposit accepted");
+    state.metrics.deposits_total.inc();
     Ok(Json(DepositResponse { index, root }))
 }
 
@@ -206,6 +209,7 @@ pub async fn post_transfer(
     verify_transfer(&state.verifier, &envelope, &[&pi])
         .map_err(|e| {
             warn!(error = %e, "transfer proof verification failed");
+            state.metrics.proof_verification_failures.inc();
             StatusCode::FORBIDDEN
         })?;
 
@@ -217,6 +221,7 @@ pub async fn post_transfer(
         })?;
 
     info!("transfer accepted");
+    state.metrics.transfers_total.inc();
     Ok(StatusCode::OK)
 }
 
@@ -246,6 +251,7 @@ pub async fn post_withdraw(
     verify_withdraw(&state.verifier, &envelope, &[&pi])
         .map_err(|e| {
             warn!(error = %e, "withdraw proof verification failed");
+            state.metrics.proof_verification_failures.inc();
             StatusCode::FORBIDDEN
         })?;
 
@@ -257,6 +263,7 @@ pub async fn post_withdraw(
         })?;
 
     info!(exit_value = body.exit_value, "withdraw accepted");
+    state.metrics.withdrawals_total.inc();
     Ok(Json(WithdrawResponse {
         nullifier: body.nullifier,
         exit_value: body.exit_value,
@@ -295,6 +302,7 @@ pub async fn post_bridge_lock(
     verify_bridge(&state.verifier, &envelope, &[&pi])
         .map_err(|e| {
             warn!(error = %e, "bridge proof verification failed");
+            state.metrics.proof_verification_failures.inc();
             StatusCode::FORBIDDEN
         })?;
 
@@ -307,6 +315,7 @@ pub async fn post_bridge_lock(
         })?;
 
     info!(src = body.source_chain_id, dest = body.destination_chain_id, "bridge lock accepted");
+    state.metrics.bridge_locks_total.inc();
     Ok(Json(BridgeLockResponse {
         nullifier: body.nullifier,
         status: "pending",
@@ -326,4 +335,16 @@ pub async fn get_bridge_status(
         nullifier: nf,
         status,
     }))
+}
+
+/// GET /metrics — Prometheus metrics endpoint.
+pub async fn get_metrics(State(state): State<AppState>) -> String {
+    // Update gauge values from current node state
+    let node = state.node.read().await;
+    state.metrics.tree_size.set(node.pool().tree_size() as i64);
+    state.metrics.epoch.set(node.epoch() as i64);
+    state.metrics.nullifier_count.set(node.pool().nullifier_set().len() as i64);
+    drop(node);
+
+    state.metrics.encode()
 }

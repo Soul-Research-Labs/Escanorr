@@ -2,6 +2,7 @@
 
 use crate::rate_limit::{RateLimitConfig, RateLimiter, rate_limit_middleware};
 use crate::routes::{self, SharedState, AppState};
+use crate::metrics::Metrics;
 use axum::{
     extract::DefaultBodyLimit,
     middleware,
@@ -30,6 +31,7 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
     let state: AppState = Arc::new(SharedState {
         node: RwLock::new(NodeState::new()),
         verifier,
+        metrics: Metrics::new(),
     });
 
     let limiter = RateLimiter::new(RateLimitConfig {
@@ -47,6 +49,7 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         .route("/nullifier/{nf}", get(routes::get_nullifier))
         .route("/bridge/lock", post(routes::post_bridge_lock))
         .route("/bridge/status/{nf}", get(routes::get_bridge_status))
+        .route("/metrics", get(routes::get_metrics))
         .layer(middleware::from_fn_with_state(limiter, rate_limit_middleware))
         .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
         .layer(CorsLayer::permissive())
