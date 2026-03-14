@@ -274,4 +274,94 @@ contract PrivacyPoolTest is Test {
         vm.expectRevert(PrivacyPool.InvalidAmount.selector);
         pool.deposit{value: amount}(keccak256("overmax"));
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Withdraw: input validation
+    // ──────────────────────────────────────────────────────────────────
+
+    function _dummyProof() internal pure returns (Groth16Verifier.Proof memory) {
+        return
+            Groth16Verifier.Proof({
+                a_x: 1,
+                a_y: 2,
+                b_x1: 1,
+                b_x2: 1,
+                b_y1: 1,
+                b_y2: 1,
+                c_x: 1,
+                c_y: 2
+            });
+    }
+
+    function test_withdraw_reverts_when_paused() public {
+        // Deposit first so pool has funds and a known root
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+        bytes32 root = pool.currentRoot();
+
+        pool.pause();
+
+        vm.expectRevert(PrivacyPool.PoolPaused.selector);
+        pool.withdraw(_dummyProof(), root, bytes32(uint256(1)), user, 1 ether);
+    }
+
+    function test_withdraw_reverts_zero_recipient() public {
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+        bytes32 root = pool.currentRoot();
+
+        vm.expectRevert(PrivacyPool.InvalidRecipient.selector);
+        pool.withdraw(_dummyProof(), root, bytes32(uint256(1)), address(0), 1 ether);
+    }
+
+    function test_withdraw_reverts_zero_nullifier() public {
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+        bytes32 root = pool.currentRoot();
+
+        vm.expectRevert(PrivacyPool.InvalidNullifier.selector);
+        pool.withdraw(_dummyProof(), root, bytes32(0), user, 1 ether);
+    }
+
+    function test_withdraw_reverts_zero_amount() public {
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+        bytes32 root = pool.currentRoot();
+
+        vm.expectRevert(PrivacyPool.InvalidAmount.selector);
+        pool.withdraw(_dummyProof(), root, bytes32(uint256(1)), user, 0);
+    }
+
+    function test_withdraw_reverts_unknown_root() public {
+        vm.expectRevert(PrivacyPool.MerkleRootUnknown.selector);
+        pool.withdraw(
+            _dummyProof(),
+            keccak256("bogus-root"),
+            bytes32(uint256(1)),
+            user,
+            1 ether
+        );
+    }
+
+    function test_withdraw_reverts_invalid_proof() public {
+        // With placeholder VK, proof verification should fail
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+        bytes32 root = pool.currentRoot();
+
+        vm.expectRevert();
+        pool.withdraw(_dummyProof(), root, bytes32(uint256(1)), user, 1 ether);
+    }
+
+    function test_withdraw_knownRoot_afterDeposit() public {
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c1"));
+        bytes32 root1 = pool.currentRoot();
+
+        vm.prank(user);
+        pool.deposit{value: 1 ether}(keccak256("c2"));
+
+        // root1 should still be known (historical root)
+        assertTrue(pool.isKnownRoot(root1));
+    }
 }
