@@ -1,6 +1,6 @@
 //! Proof generation for transfer, withdraw, and bridge circuits.
 
-use escanorr_circuits::{TransferCircuit, WithdrawCircuit, BridgeCircuit, K_TRANSFER};
+use escanorr_circuits::{TransferCircuit, WithdrawCircuit, BridgeCircuit, WealthProofCircuit, K_TRANSFER, K_WEALTH};
 use escanorr_primitives::ProofEnvelope;
 use halo2_proofs::{
     pasta::{EqAffine, vesta},
@@ -20,6 +20,9 @@ pub struct ProverParams {
     pub withdraw_vk: VerifyingKey<vesta::Affine>,
     pub bridge_pk: ProvingKey<vesta::Affine>,
     pub bridge_vk: VerifyingKey<vesta::Affine>,
+    pub wealth_params: Params<vesta::Affine>,
+    pub wealth_pk: ProvingKey<vesta::Affine>,
+    pub wealth_vk: VerifyingKey<vesta::Affine>,
 }
 
 impl ProverParams {
@@ -27,7 +30,52 @@ impl ProverParams {
     /// This performs a one-time trusted setup (IPA — no toxic waste).
     pub fn setup() -> Result<Self, plonk::Error> {
         let params = Params::<vesta::Affine>::new(K_TRANSFER);
+        let wealth_params = Params::<vesta::Affine>::new(K_WEALTH);
+        Self::derive_keys(params, wealth_params)
+    }
 
+    /// Load cached IPA params from disk, or generate and save them.
+    ///
+    /// The `cache_dir` should be a writable directory. Two files will be
+    /// created: `params_k{K_TRANSFER}.bin` and `params_k{K_WEALTH}.bin`.
+    /// Proving / verifying keys are always re-derived from the params
+    /// (fast compared to initial param generation).
+    pub fn load_or_setup(cache_dir: &std::path::Path) -> Result<Self, plonk::Error> {
+        std::fs::create_dir_all(cache_dir)
+            .map_err(|_| plonk::Error::ConstraintSystemFailure)?;
+
+        let transfer_path = cache_dir.join(format!("params_k{K_TRANSFER}.bin"));
+        let wealth_path = cache_dir.join(format!("params_k{K_WEALTH}.bin"));
+
+        let params = Self::load_or_gen_params(&transfer_path, K_TRANSFER)?;
+        let wealth_params = Self::load_or_gen_params(&wealth_path, K_WEALTH)?;
+
+        Self::derive_keys(params, wealth_params)
+    }
+
+    fn load_or_gen_params(
+        path: &std::path::Path,
+        k: u32,
+    ) -> Result<Params<vesta::Affine>, plonk::Error> {
+        if path.exists() {
+            let f = std::fs::File::open(path)
+                .map_err(|_| plonk::Error::ConstraintSystemFailure)?;
+            let mut reader = std::io::BufReader::new(f);
+            Params::read(&mut reader).map_err(|_| plonk::Error::ConstraintSystemFailure)
+        } else {
+            let params = Params::<vesta::Affine>::new(k);
+            if let Ok(f) = std::fs::File::create(path) {
+                let mut writer = std::io::BufWriter::new(f);
+                let _ = params.write(&mut writer);
+            }
+            Ok(params)
+        }
+    }
+
+    fn derive_keys(
+        params: Params<vesta::Affine>,
+        wealth_params: Params<vesta::Affine>,
+    ) -> Result<Self, plonk::Error> {
         let transfer_circuit = TransferCircuit::default();
         let transfer_vk = keygen_vk(&params, &transfer_circuit)?;
         let transfer_pk = keygen_pk(&params, transfer_vk.clone(), &transfer_circuit)?;
@@ -40,6 +88,10 @@ impl ProverParams {
         let bridge_vk = keygen_vk(&params, &bridge_circuit)?;
         let bridge_pk = keygen_pk(&params, bridge_vk.clone(), &bridge_circuit)?;
 
+        let wealth_circuit = WealthProofCircuit::default();
+        let wealth_vk = keygen_vk(&wealth_params, &wealth_circuit)?;
+        let wealth_pk = keygen_pk(&wealth_params, wealth_vk.clone(), &wealth_circuit)?;
+
         Ok(Self {
             params,
             transfer_pk,
@@ -48,6 +100,9 @@ impl ProverParams {
             withdraw_vk,
             bridge_pk,
             bridge_vk,
+            wealth_params,
+            wealth_pk,
+            wealth_vk,
         })
     }
 
@@ -102,6 +157,23 @@ pub fn prove_bridge(
     let proof_bytes = create_proof(
         &prover_params.params,
         &prover_params.bridge_pk,
+        circuit,
+        public_inputs,
+    )?;
+    let envelope = ProofEnvelope::seal(&proof_bytes)
+        .map_err(|_| plonk::Error::ConstraintSystemFailure)?;
+    Ok(envelope)
+}
+
+/// Generate a proof for a wealth proof circuit.
+pub fn prove_wealth(
+    prover_params: &ProverParams,
+    circuit: WealthProofCircuit,
+    public_inputs: &[&[pallas::Base]],
+) -> Result<ProofEnvelope, plonk::Error> {
+    let proof_bytes = create_proof(
+        &prover_params.wealth_params,
+        &prover_params.wealth_pk,
         circuit,
         public_inputs,
     )?;

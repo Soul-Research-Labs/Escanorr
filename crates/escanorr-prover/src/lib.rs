@@ -5,7 +5,8 @@
 //! - `prove_transfer`: generate a transfer proof
 //! - `prove_withdraw`: generate a withdraw proof
 //! - `prove_bridge`: generate a bridge proof
+//! - `prove_wealth`: generate a wealth proof
 
 mod prove;
 
-pub use prove::{ProverParams, prove_transfer, prove_withdraw, prove_bridge};
+pub use prove::{ProverParams, prove_transfer, prove_withdraw, prove_bridge, prove_wealth};

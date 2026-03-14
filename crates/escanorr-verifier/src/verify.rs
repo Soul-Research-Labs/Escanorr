@@ -1,6 +1,6 @@
 //! Proof verification for transfer, withdraw, and bridge circuits.
 
-use escanorr_circuits::{TransferCircuit, WithdrawCircuit, BridgeCircuit, K_TRANSFER};
+use escanorr_circuits::{TransferCircuit, WithdrawCircuit, BridgeCircuit, WealthProofCircuit, K_TRANSFER, K_WEALTH};
 use escanorr_primitives::ProofEnvelope;
 use halo2_proofs::{
     pasta::{EqAffine, vesta},
@@ -16,6 +16,8 @@ pub struct VerifierParams {
     pub transfer_vk: VerifyingKey<vesta::Affine>,
     pub withdraw_vk: VerifyingKey<vesta::Affine>,
     pub bridge_vk: VerifyingKey<vesta::Affine>,
+    pub wealth_params: Params<vesta::Affine>,
+    pub wealth_vk: VerifyingKey<vesta::Affine>,
 }
 
 impl VerifierParams {
@@ -27,11 +29,16 @@ impl VerifierParams {
         let withdraw_vk = keygen_vk(&params, &WithdrawCircuit::default())?;
         let bridge_vk = keygen_vk(&params, &BridgeCircuit::default())?;
 
+        let wealth_params = Params::<vesta::Affine>::new(K_WEALTH);
+        let wealth_vk = keygen_vk(&wealth_params, &WealthProofCircuit::default())?;
+
         Ok(Self {
             params,
             transfer_vk,
             withdraw_vk,
             bridge_vk,
+            wealth_params,
+            wealth_vk,
         })
     }
 }
@@ -76,6 +83,21 @@ pub fn verify_bridge(
     verify_proof(
         &verifier_params.params,
         &verifier_params.bridge_vk,
+        &proof_bytes,
+        public_inputs,
+    )
+}
+
+/// Verify a wealth proof.
+pub fn verify_wealth(
+    verifier_params: &VerifierParams,
+    envelope: &ProofEnvelope,
+    public_inputs: &[&[pallas::Base]],
+) -> Result<(), plonk::Error> {
+    let proof_bytes = envelope.open().map_err(|_| plonk::Error::ConstraintSystemFailure)?;
+    verify_proof(
+        &verifier_params.wealth_params,
+        &verifier_params.wealth_vk,
         &proof_bytes,
         public_inputs,
     )
@@ -168,6 +190,8 @@ mod tests {
             transfer_vk: prover_params.transfer_vk,
             withdraw_vk: prover_params.withdraw_vk,
             bridge_vk: prover_params.bridge_vk,
+            wealth_params: prover_params.wealth_params,
+            wealth_vk: prover_params.wealth_vk,
         };
 
         assert!(verify_transfer(&verifier_params, &envelope, &[&public_inputs]).is_ok());

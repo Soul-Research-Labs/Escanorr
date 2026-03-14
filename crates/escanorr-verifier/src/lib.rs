@@ -2,8 +2,8 @@
 //!
 //! Provides:
 //! - `VerifierParams`: holds verification keys
-//! - `verify_transfer`, `verify_withdraw`, `verify_bridge`: verify specific proof types
+//! - `verify_transfer`, `verify_withdraw`, `verify_bridge`, `verify_wealth`: verify specific proof types
 
 mod verify;
 
-pub use verify::{VerifierParams, verify_transfer, verify_withdraw, verify_bridge};
+pub use verify::{VerifierParams, verify_transfer, verify_withdraw, verify_bridge, verify_wealth};

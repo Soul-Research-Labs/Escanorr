@@ -34,6 +34,7 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         verifier,
         metrics: Metrics::new()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("metrics init failed: {e}")))?,
+        bridge_tracker: RwLock::new(std::collections::HashMap::new()),
     });
 
     let max_requests: u32 = std::env::var("ESCANORR_RATE_LIMIT_REQUESTS")
@@ -76,6 +77,7 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
         .route("/withdraw", post(routes::post_withdraw))
         .route("/nullifier/{nf}", get(routes::get_nullifier))
         .route("/bridge/lock", post(routes::post_bridge_lock))
+        .route("/bridge/update", post(routes::post_bridge_update))
         .route("/bridge/status/{nf}", get(routes::get_bridge_status))
         .route("/metrics", get(routes::get_metrics))
         .layer(middleware::from_fn_with_state(limiter, rate_limit_middleware))

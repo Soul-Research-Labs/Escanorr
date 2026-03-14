@@ -5,6 +5,7 @@ use escanorr_primitives::{Base, ProofEnvelope};
 use escanorr_verifier::{VerifierParams, verify_transfer, verify_withdraw, verify_bridge};
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -12,11 +13,37 @@ use tracing::{info, warn};
 use crate::metrics::Metrics;
 use escanorr_node::NodeState;
 
+/// Bridge transfer lifecycle state.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BridgeState {
+    /// Source note locked, awaiting relayer.
+    Locked,
+    /// Relayer has picked up the request.
+    Relaying,
+    /// Destination chain has confirmed the mint.
+    Confirmed,
+    /// Bridge transfer failed (timeout, invalid proof on destination).
+    Failed,
+}
+
+impl BridgeState {
+    fn as_str(self) -> &'static str {
+        match self {
+            BridgeState::Locked => "locked",
+            BridgeState::Relaying => "relaying",
+            BridgeState::Confirmed => "confirmed",
+            BridgeState::Failed => "failed",
+        }
+    }
+}
+
 /// Shared application state: mutable node + read-only verifier keys + metrics.
 pub struct SharedState {
     pub node: RwLock<NodeState>,
     pub verifier: VerifierParams,
     pub metrics: Metrics,
+    pub bridge_tracker: RwLock<HashMap<[u8; 32], BridgeState>>,
 }
 
 pub type AppState = Arc<SharedState>;
@@ -108,11 +135,20 @@ pub struct BridgeLockResponse {
     pub status: &'static str,
 }
 
+/// Bridge status update request body (called by relayer).
+#[derive(Deserialize)]
+pub struct BridgeUpdateBody {
+    pub nullifier: String,
+    /// One of: "relaying", "confirmed", "failed"
+    pub status: String,
+}
+
 /// Bridge status response.
 #[derive(Serialize)]
 pub struct BridgeStatusResponse {
     pub nullifier: String,
     pub status: &'static str,
+    pub state: BridgeState,
 }
 
 fn base_to_hex(b: &Base) -> String {
@@ -316,6 +352,9 @@ pub async fn post_bridge_lock(
 
     info!(src = body.source_chain_id, dest = body.destination_chain_id, "bridge lock accepted");
     state.metrics.bridge_locks_total.inc();
+    // Track bridge state
+    let nf_bytes = nullifier.to_repr();
+    state.bridge_tracker.write().await.insert(nf_bytes, BridgeState::Locked);
     Ok(Json(BridgeLockResponse {
         nullifier: body.nullifier,
         status: "pending",
@@ -328,13 +367,63 @@ pub async fn get_bridge_status(
     Path(nf): Path<String>,
 ) -> Result<Json<BridgeStatusResponse>, StatusCode> {
     let nullifier = hex_to_base(&nf)?;
-    let node = state.node.read().await;
-    let spent = node.pool().nullifier_set().contains(&nullifier);
-    let status = if spent { "confirmed" } else { "pending" };
+    let nf_bytes = nullifier.to_repr();
+    let tracker = state.bridge_tracker.read().await;
+    let bridge_state = tracker.get(&nf_bytes).copied().unwrap_or_else(|| {
+        // Fall back to nullifier set for legacy lookups
+        let node_guard = state.node.try_read();
+        if let Ok(node) = node_guard {
+            if node.pool().nullifier_set().contains(&nullifier) {
+                BridgeState::Confirmed
+            } else {
+                BridgeState::Failed
+            }
+        } else {
+            BridgeState::Locked
+        }
+    });
     Ok(Json(BridgeStatusResponse {
         nullifier: nf,
-        status,
+        status: bridge_state.as_str(),
+        state: bridge_state,
     }))
+}
+
+/// POST /bridge/update — relayer updates bridge transfer status.
+pub async fn post_bridge_update(
+    State(state): State<AppState>,
+    Json(body): Json<BridgeUpdateBody>,
+) -> Result<StatusCode, StatusCode> {
+    let nullifier = hex_to_base(&body.nullifier)?;
+    let nf_bytes = nullifier.to_repr();
+    let new_state = match body.status.as_str() {
+        "relaying" => BridgeState::Relaying,
+        "confirmed" => BridgeState::Confirmed,
+        "failed" => BridgeState::Failed,
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    let mut tracker = state.bridge_tracker.write().await;
+    // Only allow transitions from a known entry
+    let current = tracker.get(&nf_bytes).copied();
+    match (current, new_state) {
+        (Some(BridgeState::Locked), BridgeState::Relaying)
+        | (Some(BridgeState::Locked), BridgeState::Failed)
+        | (Some(BridgeState::Relaying), BridgeState::Confirmed)
+        | (Some(BridgeState::Relaying), BridgeState::Failed) => {
+            tracker.insert(nf_bytes, new_state);
+            info!(nullifier = %body.nullifier, status = %body.status, "bridge status updated");
+            Ok(StatusCode::OK)
+        }
+        _ => {
+            warn!(
+                nullifier = %body.nullifier,
+                requested = %body.status,
+                current = ?current,
+                "invalid bridge state transition"
+            );
+            Err(StatusCode::CONFLICT)
+        }
+    }
 }
 
 /// GET /metrics — Prometheus metrics endpoint.

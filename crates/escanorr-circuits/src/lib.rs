@@ -12,10 +12,12 @@ pub mod gadgets;
 pub mod transfer;
 pub mod withdraw;
 pub mod bridge;
+pub mod wealth;
 
 pub use transfer::TransferCircuit;
 pub use withdraw::WithdrawCircuit;
 pub use bridge::BridgeCircuit;
+pub use wealth::WealthProofCircuit;
 
 /// Circuit parameter: `k` value for transfer/withdraw circuits.
 /// Increased to accommodate Poseidon hashing (Merkle paths, commitments, nullifiers).
