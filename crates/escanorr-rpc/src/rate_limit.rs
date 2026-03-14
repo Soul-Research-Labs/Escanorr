@@ -11,8 +11,8 @@ use axum::{
     response::Response,
 };
 use std::{
-    collections::VecDeque,
-    net::SocketAddr,
+    collections::{HashSet, VecDeque},
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -26,6 +26,8 @@ pub struct RateLimitConfig {
     pub max_requests: u32,
     /// Window duration.
     pub window: Duration,
+    /// IPs exempt from rate limiting (e.g. relayers, internal services).
+    pub exempt_ips: HashSet<IpAddr>,
 }
 
 impl Default for RateLimitConfig {
@@ -33,6 +35,7 @@ impl Default for RateLimitConfig {
         Self {
             max_requests: 60,
             window: Duration::from_secs(60),
+            exempt_ips: HashSet::new(),
         }
     }
 }
@@ -42,7 +45,7 @@ impl Default for RateLimitConfig {
 pub struct RateLimiter {
     config: RateLimitConfig,
     /// Map from IP address to timestamps of recent requests.
-    windows: Arc<DashMap<std::net::IpAddr, VecDeque<Instant>>>,
+    windows: Arc<DashMap<IpAddr, VecDeque<Instant>>>,
 }
 
 impl RateLimiter {
@@ -54,7 +57,10 @@ impl RateLimiter {
     }
 
     /// Check if a request from `ip` is allowed. Returns `true` if allowed.
-    fn check(&self, ip: std::net::IpAddr) -> bool {
+    fn check(&self, ip: IpAddr) -> bool {
+        if self.config.exempt_ips.contains(&ip) {
+            return true;
+        }
         let now = Instant::now();
         let cutoff = now - self.config.window;
 

@@ -38,6 +38,7 @@ pub async fn run_server(addr: SocketAddr) -> std::io::Result<()> {
     let limiter = RateLimiter::new(RateLimitConfig {
         max_requests: 60,
         window: Duration::from_secs(60),
+        ..Default::default()
     });
 
     let trace_layer = TraceLayer::new_for_http()
