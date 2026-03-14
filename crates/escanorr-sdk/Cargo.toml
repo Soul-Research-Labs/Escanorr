@@ -33,3 +33,11 @@ tempfile = "3"
 [[example]]
 name = "e2e"
 path = "examples/e2e.rs"
+
+[[example]]
+name = "withdraw"
+path = "examples/withdraw.rs"
+
+[[example]]
+name = "bridge"
+path = "examples/bridge.rs"
